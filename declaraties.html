@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Declaraties</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import {
+    getFirestore, collection, addDoc, deleteDoc, doc,
+    onSnapshot, query, orderBy, serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  // ── FIREBASE CONFIG ── vervang dit met jouw eigen config ──────────
+  const firebaseConfig = {
+    apiKey:            "JOUW_API_KEY",
+    authDomain:        "JOUW_PROJECT.firebaseapp.com",
+    projectId:         "JOUW_PROJECT_ID",
+    storageBucket:     "JOUW_PROJECT.appspot.com",
+    messagingSenderId: "JOUW_SENDER_ID",
+    appId:             "JOUW_APP_ID"
+  };
+  // ─────────────────────────────────────────────────────────────────
+
+  const app = initializeApp(firebaseConfig);
+  const db  = getFirestore(app);
+  const COL = "declaraties";
+
+  let allEntries   = [];
+  let currentYear  = new Date().getFullYear();
+  let currentMonth = new Date().getMonth();
+  let currentTab   = 'km';
+  let pendingPhotos = [];
+  let deleteId     = null;
+  let exportScope  = 'current';
+  let stops        = [];
+
+  const KM_RATE      = 0.23;
+  const WOON_WERK_KM = 120;
+  const MONTHS = ['Januari','Februari','Maart','April','Mei','Juni',
+                  'Juli','Augustus','September','Oktober','November','December'];
+
+  // REALTIME LISTENER
+  function startListener() {
+    const q = query(collection(db, COL), orderBy("date","desc"));
+    onSnapshot(q, snap => {
+      allEntries = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      updateUI();
+    }, err => {
+      console.error(err);
+      document.getElementById('configBanner').style.display = 'flex';
+    });
+  }
+
+  // ADD
+  async function addEntry() {
+    if (currentTab === 'km') {
+      const date = document.getElementById('kmDate').value;
+      const isWW = document.getElementById('wwToggle').classList.contains('active');
+      const km   = isWW ? WOON_WERK_KM : parseFloat(document.getElementById('kmAmount').value);
+      const desc = isWW ? 'Woon-werk' : buildStopDescription();
+      if (!date)          { toast('Vul een datum in'); return; }
+      if (!km || km <= 0) { toast('Vul een geldig aantal km in'); return; }
+      await addDoc(collection(db, COL), {
+        type:'km', date, km, desc,
+        photos: await compressPhotos(pendingPhotos),
+        createdAt: serverTimestamp()
+      });
+    } else {
+      const date     = document.getElementById('otherDate').value;
+      const declType = document.getElementById('otherType').value;
+      const desc     = document.getElementById('otherDesc').value.trim();
+      const amount   = parseFloat(document.getElementById('otherAmount').value);
+      if (!date)            { toast('Vul een datum in'); return; }
+      if (!declType)        { toast('Selecteer een type declaratie'); return; }
+      if (!amount || amount <= 0) { toast('Vul een geldig bedrag in'); return; }
+      await addDoc(collection(db, COL), {
+        type:'other', date, declType, desc, amount,
+        photos: await compressPhotos(pendingPhotos),
+        createdAt: serverTimestamp()
+      });
+    }
+    resetForm();
+    toast('✓ Declaratie opgeslagen');
+  }
+
+  // DELETE
+  async function confirmDelete() {
+    await deleteDoc(doc(db, COL, deleteId));
+    deleteId = null;
+    document.getElementById('deleteModal').classList.remove('open');
+    toast('Declaratie verwijderd');
+  }
+
+  // EXPORT
+  function doExport() {
+    let data = [...allEntries];
+    let filename = 'declaraties';
+    if (exportScope === 'current') {
+      data = data.filter(e => {
+        const d = new Date(e.date);
+        return d.getFullYear()===currentYear && d.getMonth()===currentMonth;
+      });
+      filename = `declaraties_${MONTHS[currentMonth].toLowerCase()}_${currentYear}`;
+    } else if (exportScope === 'year') {
+      data = data.filter(e => new Date(e.date).getFullYear()===currentYear);
+      filename = `declaraties_${currentYear}`;
+    }
+    data.sort((a,b) => new Date(a.date)-new Date(b.date));
+
+    const rows = data.map(e => {
+      const isKm = e.type === 'km';
+      return {
+        'Datum':         formatDate(e.date),
+        'Type':          isKm ? 'Kilometers' : (e.declType||'Overig'),
+        'Omschrijving':  e.desc || '',
+        'Kilometers':    isKm ? e.km : '',
+        'Tarief (€/km)': isKm ? KM_RATE : '',
+        'Bedrag (€)':    parseFloat((isKm ? e.km*KM_RATE : e.amount).toFixed(2)),
+      };
+    });
+    const totalKm    = data.filter(e=>e.type==='km').reduce((s,e)=>s+e.km*KM_RATE,0);
+    const totalOther = data.filter(e=>e.type==='other').reduce((s,e)=>s+e.amount,0);
+    rows.push({});
+    rows.push({'Datum':'TOTAAL',        'Bedrag (€)': parseFloat((totalKm+totalOther).toFixed(2))});
+    rows.push({'Datum':'Km vergoeding', 'Bedrag (€)': parseFloat(totalKm.toFixed(2))});
+    rows.push({'Datum':'Overige kosten','Bedrag (€)': parseFloat(totalOther.toFixed(2))});
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [14,22,38,12,14,14].map(w=>({wch:w}));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Declaraties');
+    XLSX.writeFile(wb, `${filename}.xlsx`);
+    closeExportModal();
+    toast('✓ Excel gedownload');
+  }
+
+  // UI
+  function updateUI() {
+    document.getElementById('monthLabel').textContent = `${MONTHS[currentMonth]} ${currentYear}`;
+    const entries    = getMonthEntries();
+    const kmTotal    = entries.filter(e=>e.type==='km').reduce((s,e)=>s+e.km*KM_RATE,0);
+    const otherTotal = entries.filter(e=>e.type==='other').reduce((s,e)=>s+e.amount,0);
+    const total = kmTotal+otherTotal;
+    document.getElementById('sumKm').textContent    = formatEur(kmTotal);
+    document.getElementById('sumOther').textContent = formatEur(otherTotal);
+    document.getElementById('sumTotal').textContent = formatEur(total);
+    document.getElementById('monthTotalLabel').textContent = `Totaal: ${formatEur(total)}`;
+    document.getElementById('entriesTitle').textContent    = `Declaraties ${MONTHS[currentMonth]}`;
+    document.getElementById('entryCount').textContent      = `${entries.length} item${entries.length!==1?'s':''}`;
+    document.getElementById('expCurrentLabel').textContent = `${MONTHS[currentMonth]} ${currentYear}`;
+    document.getElementById('expYearLabel').textContent    = `Heel ${currentYear}`;
+    renderEntries(entries);
+  }
+
+  function getMonthEntries() {
+    return allEntries.filter(e => {
+      const d = new Date(e.date);
+      return d.getFullYear()===currentYear && d.getMonth()===currentMonth;
+    });
+  }
+
+  function renderEntries(entries) {
+    const list = document.getElementById('entriesList');
+    if (entries.length === 0) {
+      list.innerHTML = `<div class="empty-state"><div class="icon">📭</div><p>Nog geen declaraties voor ${MONTHS[currentMonth]} ${currentYear}</p></div>`;
+      return;
+    }
+    const sorted = [...entries].sort((a,b)=>new Date(b.date)-new Date(a.date));
+    list.innerHTML = sorted.map(e => {
+      const isKm   = e.type === 'km';
+      const amount = isKm ? e.km*KM_RATE : e.amount;
+      const photos = e.photos || [];
+      const isWW   = e.desc === 'Woon-werk';
+      const titleText = isKm ? (e.desc||'Kilometers') : (e.desc||e.declType||'Declaratie');
+      return `
+      <div class="entry-card">
+        <div class="entry-main">
+          <div class="entry-type-badge ${isKm?'badge-km':'badge-other'}">${isKm?(isWW?'🏠':'🚗'):getTypeEmoji(e.declType)}</div>
+          <div class="entry-info">
+            <div class="entry-title">${esc(titleText)}</div>
+            <div class="entry-meta">
+              <span>📅 ${formatDate(e.date)}</span>
+              ${isKm?`<span class="tag-km">${e.km} km × €${KM_RATE}${isWW?' · woon-werk':''}</span>`:`<span class="tag-other">${esc(e.declType||'')}</span>`}
+              ${photos.length>0?`<span>📎 ${photos.length} foto${photos.length>1?"'s":''}</span>`:''}
+            </div>
+          </div>
+          <div class="entry-right">
+            <div class="entry-amount ${isKm?'amount-km':'amount-other'}">${formatEur(amount)}</div>
+            <div class="entry-actions"><button class="btn-icon" onclick="openDeleteModal('${e.id}')">🗑</button></div>
+          </div>
+        </div>
+        ${photos.length>0?`<div class="entry-photos">${photos.map(p=>`<img class="photo-thumb" src="${p}" onclick="openLightbox('${p}')">`).join('')}</div>`:''}
+      </div>`;
+    }).join('');
+  }
+
+  // WOON-WERK TOGGLE
+  function toggleWoonWerk() {
+    const btn  = document.getElementById('wwToggle');
+    const isOn = btn.classList.toggle('active');
+    ['kmManualSection','kmDescSection','stopsSection'].forEach(id => {
+      document.getElementById(id).style.display = isOn ? 'none' : '';
+    });
+    updateKmPreview();
+  }
+
+  // STOPS
+  function addStop() {
+    const val = document.getElementById('stopInput').value.trim();
+    if (!val) return;
+    stops.push(val);
+    document.getElementById('stopInput').value = '';
+    renderStops();
+  }
+  function removeStop(i) { stops.splice(i,1); renderStops(); }
+  function renderStops() {
+    const el = document.getElementById('stopsList');
+    el.innerHTML = stops.map((s,i) => `
+      <div class="stop-chip">
+        <span class="stop-dot"></span>
+        <span class="stop-label">${esc(s)}</span>
+        <button onclick="removeStop(${i})">✕</button>
+      </div>${i<stops.length-1?'<div class="stop-arrow">↓</div>':''}
+    `).join('');
+  }
+  function buildStopDescription() {
+    if (stops.length > 0) return stops.join(' → ');
+    return document.getElementById('kmDesc').value.trim();
+  }
+
+  // KM PREVIEW
+  function updateKmPreview() {
+    const isWW = document.getElementById('wwToggle').classList.contains('active');
+    const km   = isWW ? WOON_WERK_KM : (parseFloat(document.getElementById('kmAmount').value)||0);
+    const el   = document.getElementById('kmPreview');
+    if (km > 0) {
+      el.classList.add('visible');
+      el.innerHTML = `<strong>${km} km</strong> × €${KM_RATE} = <strong>${formatEur(km*KM_RATE)}</strong>${isWW?' <span class="tag-ww">woon-werk</span>':''}`;
+    } else {
+      el.classList.remove('visible');
+    }
+  }
+
+  // PHOTOS
+  function handlePhotos(event) {
+    const preview = document.getElementById('photoPreview');
+    Array.from(event.target.files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        pendingPhotos.push(e.target.result);
+        const img = document.createElement('img');
+        img.className = 'photo-thumb';
+        img.src = e.target.result;
+        img.onclick = () => openLightbox(e.target.result);
+        preview.appendChild(img);
+      };
+      reader.readAsDataURL(file);
+    });
+    event.target.value = '';
+  }
+
+  async function compressPhotos(photos) {
+    return Promise.all(photos.map(dataUrl => new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 800;
+        let w=img.width, h=img.height;
+        if (w>MAX||h>MAX) { if(w>h){h=Math.round(h*MAX/w);w=MAX;}else{w=Math.round(w*MAX/h);h=MAX;} }
+        const c=document.createElement('canvas'); c.width=w; c.height=h;
+        c.getContext('2d').drawImage(img,0,0,w,h);
+        resolve(c.toDataURL('image/jpeg',0.72));
+      };
+      img.src = dataUrl;
+    })));
+  }
+
+  // RESET
+  function resetForm() {
+    ['kmDate','kmAmount','kmDesc','otherDate','otherDesc','otherAmount'].forEach(id=>{
+      const el=document.getElementById(id); if(el) el.value='';
+    });
+    document.getElementById('otherType').value='';
+    pendingPhotos=[]; stops=[];
+    document.getElementById('photoPreview').innerHTML='';
+    document.getElementById('stopsList').innerHTML='';
+    document.getElementById('kmPreview').classList.remove('visible');
+    const ww=document.getElementById('wwToggle');
+    if(ww.classList.contains('active')) {
+      ww.classList.remove('active');
+      ['kmManualSection','kmDescSection','stopsSection'].forEach(id=>{ document.getElementById(id).style.display=''; });
+    }
+    const today=new Date().toISOString().slice(0,10);
+    document.getElementById('kmDate').value=today;
+    document.getElementById('otherDate').value=today;
+  }
+
+  // HELPERS
+  function formatEur(v){ return '€'+v.toFixed(2).replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g,'.'); }
+  function formatDate(s){ return new Date(s).toLocaleDateString('nl-NL',{day:'2-digit',month:'short',year:'numeric'}); }
+  function getTypeEmoji(t){ return t?t.split(' ')[0]:'🧾'; }
+  function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function toast(msg){
+    const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'),2400);
+  }
+
+  // MONTH NAV
+  function changeMonth(dir) {
+    currentMonth+=dir;
+    if(currentMonth>11){currentMonth=0;currentYear++;}
+    if(currentMonth<0) {currentMonth=11;currentYear--;}
+    updateUI();
+  }
+
+  // TAB
+  function switchTab(tab) {
+    currentTab=tab;
+    document.getElementById('formKm').style.display    = tab==='km'    ? 'block':'none';
+    document.getElementById('formOther').style.display = tab==='other' ? 'block':'none';
+    document.getElementById('tabKm').classList.toggle('active', tab==='km');
+    document.getElementById('tabOther').classList.toggle('active', tab==='other');
+    pendingPhotos=[];
+    document.getElementById('photoPreview').innerHTML='';
+  }
+
+  // MODALS
+  function openDeleteModal(id) { deleteId=id; document.getElementById('deleteModal').classList.add('open'); }
+  function closeDeleteModal()  { deleteId=null; document.getElementById('deleteModal').classList.remove('open'); }
+  function openExportModal()   { document.getElementById('exportModal').classList.add('open'); }
+  function closeExportModal()  { document.getElementById('exportModal').classList.remove('open'); }
+  function openLightbox(src)   { document.getElementById('lightboxImg').src=src; document.getElementById('lightbox').classList.add('open'); }
+  function closeLightbox()     { document.getElementById('lightbox').classList.remove('open'); }
+  function selectExport(scope) {
+    exportScope=scope;
+    ['current','year','all'].forEach(s=>{
+      document.getElementById('exp'+s.charAt(0).toUpperCase()+s.slice(1)).classList.toggle('selected',s===scope);
+    });
+  }
+
+  // INIT
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('stopInput').addEventListener('keydown', e=>{
+      if(e.key==='Enter'){e.preventDefault();addStop();}
+    });
+    document.addEventListener('keydown', e=>{
+      if(e.key==='Escape'){closeLightbox();closeExportModal();closeDeleteModal();}
+    });
+    resetForm();
+    startListener();
+  });
+
+  // Expose
+  Object.assign(window,{
+    changeMonth,switchTab,toggleWoonWerk,addStop,removeStop,
+    handlePhotos,addEntry,resetForm,
+    openDeleteModal,closeDeleteModal,confirmDelete,
+    openExportModal,closeExportModal,selectExport,doExport,
+    openLightbox,closeLightbox,updateKmPreview
+  });
+</script>
+
+<style>
+:root{
+  --bg:#F7F8FA;--surface:#FFF;--border:#E2E5EA;
+  --accent:#2563EB;--accent-light:#EFF6FF;--accent-hover:#1D4ED8;
+  --text:#111827;--muted:#6B7280;
+  --danger:#DC2626;--danger-light:#FEF2F2;
+  --success:#16A34A;
+  --km:#7C3AED;--km-light:#F5F3FF;
+  --ww:#D97706;--ww-light:#FFFBEB;
+  --shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
+  --shadow-md:0 4px 12px rgba(0,0,0,.10);
+  --r:10px;--rs:6px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.5}
+
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:54px;position:sticky;top:0;z-index:100;box-shadow:var(--shadow)}
+.logo{width:30px;height:30px;background:var(--accent);border-radius:7px;display:flex;align-items:center;justify-content:center;color:white;font-size:15px;margin-right:8px}
+header h1{font-size:15px;font-weight:700;letter-spacing:-.3px;display:flex;align-items:center}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:#22C55E;display:inline-block;margin-left:7px}
+.header-left{display:flex;align-items:center}
+
+#configBanner{display:none;background:#FEF3C7;border-bottom:1px solid #FCD34D;padding:10px 16px;align-items:center;gap:10px;font-size:13px}
+#configBanner a{color:var(--accent);font-weight:600;text-decoration:none}
+
+.container{max-width:860px;margin:0 auto;padding:18px 14px}
+
+.month-bar{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;box-shadow:var(--shadow)}
+.month-nav{display:flex;align-items:center;gap:10px}
+.month-nav button{width:32px;height:32px;border:1px solid var(--border);background:var(--bg);border-radius:var(--rs);cursor:pointer;font-size:16px;transition:background .15s}
+.month-nav button:hover{background:var(--accent-light);border-color:var(--accent)}
+#monthLabel{font-size:16px;font-weight:700;min-width:148px;text-align:center;letter-spacing:-.3px}
+.month-total{font-size:14px;font-weight:700;color:var(--accent)}
+
+.summary-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+.summary-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;box-shadow:var(--shadow)}
+.summary-card .label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
+.summary-card .value{font-size:20px;font-weight:800;letter-spacing:-.5px}
+.summary-card.km .value{color:var(--km)}
+.summary-card.overig .value{color:var(--accent)}
+
+.form-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px;margin-bottom:16px;box-shadow:var(--shadow)}
+.form-card h2{font-size:11px;font-weight:700;margin-bottom:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+
+.form-tabs{display:flex;gap:6px;margin-bottom:16px}
+.tab-btn{flex:1;padding:9px;border:1.5px solid var(--border);background:var(--bg);border-radius:var(--rs);cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);transition:all .15s;display:flex;align-items:center;justify-content:center;gap:6px}
+.tab-btn.active{background:var(--accent);border-color:var(--accent);color:white}
+.tab-btn:not(.active):hover{border-color:var(--accent);color:var(--accent)}
+
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+.form-group{display:flex;flex-direction:column;gap:4px}
+.form-group.full{grid-column:1/-1}
+label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+input,select,textarea{border:1.5px solid var(--border);border-radius:var(--rs);padding:9px 11px;font-size:14px;font-family:inherit;color:var(--text);background:var(--bg);transition:border-color .15s;outline:none;width:100%}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);background:white}
+
+/* WOON-WERK */
+.ww-row{grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ww-btn{display:flex;align-items:center;gap:7px;padding:9px 16px;border:1.5px solid var(--border);background:var(--bg);border-radius:var(--rs);cursor:pointer;font-size:13px;font-weight:700;color:var(--muted);transition:all .18s;white-space:nowrap;user-select:none}
+.ww-btn:hover{border-color:var(--ww);color:var(--ww);background:var(--ww-light)}
+.ww-btn.active{background:var(--ww-light);border-color:var(--ww);color:var(--ww)}
+.ww-km{font-size:11px;font-weight:700;background:rgba(0,0,0,.07);padding:2px 7px;border-radius:10px}
+.ww-btn.active .ww-km{background:rgba(217,119,6,.15)}
+.ww-divider{font-size:11px;color:var(--muted);font-weight:600;flex-shrink:0}
+
+.km-preview{background:var(--km-light);border:1px solid #DDD6FE;border-radius:var(--rs);padding:9px 12px;font-size:13px;color:var(--km);font-weight:500;display:none;grid-column:1/-1}
+.km-preview.visible{display:block}
+.tag-ww{background:var(--ww-light);color:var(--ww);font-size:11px;font-weight:700;padding:2px 7px;border-radius:10px;margin-left:6px}
+
+/* STOPS */
+.stops-section{grid-column:1/-1}
+.stops-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
+.stop-input-row{display:flex;gap:6px}
+.stop-input-row input{flex:1}
+.add-stop-btn{padding:0 14px;background:var(--accent);color:white;border:none;border-radius:var(--rs);cursor:pointer;font-size:20px;font-weight:700;line-height:1;flex-shrink:0;height:40px;transition:background .15s}
+.add-stop-btn:hover{background:var(--accent-hover)}
+#stopsList{margin-top:8px;display:flex;flex-direction:column;gap:3px}
+.stop-chip{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--rs);padding:7px 10px}
+.stop-dot{width:8px;height:8px;background:var(--accent);border-radius:50%;flex-shrink:0}
+.stop-label{flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stop-chip button{background:none;border:none;cursor:pointer;color:var(--muted);font-size:13px;padding:0 2px;line-height:1;flex-shrink:0}
+.stop-chip button:hover{color:var(--danger)}
+.stop-arrow{text-align:center;font-size:13px;color:var(--muted);line-height:1;padding:1px 0}
+
+/* PHOTO */
+.photo-upload{border:2px dashed var(--border);border-radius:var(--rs);padding:14px;text-align:center;cursor:pointer;position:relative;transition:all .15s;background:var(--bg)}
+.photo-upload:hover{border-color:var(--accent);background:var(--accent-light)}
+.photo-upload input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.photo-upload .icon{font-size:22px;margin-bottom:3px}
+.photo-upload .hint{font-size:12px;color:var(--muted)}
+.photo-preview{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.photo-thumb{width:60px;height:60px;border-radius:var(--rs);object-fit:cover;border:1px solid var(--border);cursor:pointer;transition:transform .15s}
+.photo-thumb:hover{transform:scale(1.06)}
+
+.form-footer{margin-top:14px;display:flex;justify-content:flex-end;gap:8px}
+
+.btn{padding:9px 16px;border-radius:var(--rs);font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:var(--accent);color:white}
+.btn-primary:hover{background:var(--accent-hover)}
+.btn-secondary{background:var(--bg);color:var(--text);border:1.5px solid var(--border)}
+.btn-secondary:hover{border-color:var(--accent);color:var(--accent)}
+.btn-success{background:var(--success);color:white}
+.btn-success:hover{background:#15803D}
+.btn-sm{padding:7px 12px;font-size:12px}
+.btn-icon{background:transparent;color:var(--muted);border:1px solid transparent;padding:5px 8px;font-size:14px;border-radius:var(--rs);cursor:pointer;transition:all .15s}
+.btn-icon:hover{background:var(--danger-light);color:var(--danger);border-color:var(--danger)}
+
+.entries-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.entries-header h2{font-size:14px;font-weight:700}
+.entries-list{display:flex;flex-direction:column;gap:8px}
+
+.entry-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow);transition:box-shadow .15s}
+.entry-card:hover{box-shadow:var(--shadow-md)}
+.entry-main{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:13px 14px}
+.entry-type-badge{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+.badge-km{background:var(--km-light)}
+.badge-other{background:var(--accent-light)}
+.entry-info{min-width:0}
+.entry-title{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.entry-meta{font-size:11px;color:var(--muted);margin-top:2px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.entry-right{text-align:right;flex-shrink:0}
+.entry-amount{font-size:15px;font-weight:800;letter-spacing:-.3px}
+.amount-km{color:var(--km)}
+.amount-other{color:var(--accent)}
+.entry-actions{margin-top:3px;display:flex;justify-content:flex-end}
+.entry-photos{padding:0 14px 11px;display:flex;gap:7px;flex-wrap:wrap}
+
+.tag-km{background:var(--km-light);color:var(--km);font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px}
+.tag-other{background:var(--accent-light);color:var(--accent);font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px}
+
+.empty-state{text-align:center;padding:44px 24px;background:var(--surface);border:1.5px dashed var(--border);border-radius:var(--r)}
+.empty-state .icon{font-size:38px;margin-bottom:8px}
+.empty-state p{color:var(--muted);font-size:13px}
+
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:1000;padding:16px}
+.modal-overlay.open{display:flex}
+.modal{background:white;border-radius:var(--r);max-width:460px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.modal-header{padding:16px 18px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-header h3{font-size:14px;font-weight:700}
+.modal-close{background:none;border:none;font-size:18px;cursor:pointer;color:var(--muted);padding:4px;border-radius:4px}
+.modal-close:hover{color:var(--text);background:var(--bg)}
+.modal-body{padding:18px}
+.modal-footer{padding:12px 18px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
+
+.export-options{display:flex;flex-direction:column;gap:9px}
+.export-option{border:1.5px solid var(--border);border-radius:var(--rs);padding:12px 14px;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:12px}
+.export-option:hover,.export-option.selected{border-color:var(--accent);background:var(--accent-light)}
+.export-option .eo-icon{font-size:22px}
+.export-option .eo-text strong{display:block;font-size:13px}
+.export-option .eo-text span{font-size:12px;color:var(--muted)}
+
+.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);display:none;align-items:center;justify-content:center;z-index:2000}
+.lightbox.open{display:flex}
+.lightbox img{max-width:92vw;max-height:88vh;object-fit:contain;border-radius:var(--r)}
+.lightbox-close{position:absolute;top:14px;right:14px;background:rgba(255,255,255,.15);color:white;border:none;cursor:pointer;font-size:20px;width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--text);color:white;padding:9px 18px;border-radius:20px;font-size:13px;font-weight:500;opacity:0;transition:opacity .2s;pointer-events:none;z-index:3000;white-space:nowrap}
+.toast.show{opacity:1}
+
+@media(max-width:580px){
+  .summary-grid{grid-template-columns:1fr 1fr}
+  .summary-card:last-child{grid-column:1/-1}
+  .form-grid{grid-template-columns:1fr}
+  .form-group.full{grid-column:auto}
+  .ww-row{gap:8px}
+  .summary-card .value{font-size:17px}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="logo">🧾</div>
+    <h1>Declaraties <span class="sync-dot" title="Gesynchroniseerd via Firebase"></span></h1>
+  </div>
+  <button class="btn btn-secondary btn-sm" onclick="openExportModal()">⬇ Export Excel</button>
+</header>
+
+<div id="configBanner">
+  ⚠️ Firebase nog niet geconfigureerd — vul jouw Firebase config in bovenaan het HTML-bestand.
+  <a href="https://console.firebase.google.com/" target="_blank">Naar Firebase console →</a>
+</div>
+
+<div class="container">
+
+  <div class="month-bar">
+    <div class="month-nav">
+      <button onclick="changeMonth(-1)">‹</button>
+      <div id="monthLabel"></div>
+      <button onclick="changeMonth(1)">›</button>
+    </div>
+    <div class="month-total" id="monthTotalLabel"></div>
+  </div>
+
+  <div class="summary-grid">
+    <div class="summary-card km">
+      <div class="label">🚗 Km vergoeding</div>
+      <div class="value" id="sumKm">€0,00</div>
+    </div>
+    <div class="summary-card overig">
+      <div class="label">🧾 Overige kosten</div>
+      <div class="value" id="sumOther">€0,00</div>
+    </div>
+    <div class="summary-card totaal">
+      <div class="label">💰 Totaal</div>
+      <div class="value" id="sumTotal">€0,00</div>
+    </div>
+  </div>
+
+  <div class="form-card">
+    <h2>Declaratie toevoegen</h2>
+    <div class="form-tabs">
+      <button class="tab-btn active" id="tabKm"    onclick="switchTab('km')">🚗 Kilometers</button>
+      <button class="tab-btn"        id="tabOther" onclick="switchTab('other')">🧾 Kosten</button>
+    </div>
+
+    <!-- KM FORM -->
+    <div id="formKm">
+      <div class="form-grid">
+
+        <div class="ww-row">
+          <button class="ww-btn" id="wwToggle" onclick="toggleWoonWerk()">
+            🏠 Woon-werk <span class="ww-km">120 km</span>
+          </button>
+          <span class="ww-divider">of voer zelf in:</span>
+        </div>
+
+        <div class="form-group">
+          <label>Datum</label>
+          <input type="date" id="kmDate">
+        </div>
+
+        <div class="form-group" id="kmManualSection">
+          <label>Kilometers</label>
+          <input type="number" id="kmAmount" placeholder="0" min="0" step="1" oninput="updateKmPreview()">
+        </div>
+
+        <div class="km-preview full" id="kmPreview"></div>
+
+        <div class="form-group full" id="kmDescSection">
+          <label>Vrije omschrijving (optioneel)</label>
+          <input type="text" id="kmDesc" placeholder="bijv. Klantbezoek Utrecht">
+        </div>
+
+        <div class="stops-section" id="stopsSection">
+          <div class="stops-label">🗺 Stops tijdens rit (voeg toe per stop)</div>
+          <div class="stop-input-row">
+            <input type="text" id="stopInput" placeholder="bijv. Utrecht CS, Klant Amsterdam, Thuis...">
+            <button class="add-stop-btn" onclick="addStop()">+</button>
+          </div>
+          <div id="stopsList"></div>
+        </div>
+
+        <div class="form-group full">
+          <label>Foto (bonnetje / routekaart)</label>
+          <div class="photo-upload">
+            <input type="file" accept="image/*" multiple onchange="handlePhotos(event)">
+            <div class="icon">📷</div>
+            <div class="hint">Klik of sleep foto's hiernaartoe</div>
+          </div>
+          <div class="photo-preview" id="photoPreview"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- OVERIG FORM -->
+    <div id="formOther" style="display:none">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Datum</label>
+          <input type="date" id="otherDate">
+        </div>
+        <div class="form-group">
+          <label>Type declaratie</label>
+          <select id="otherType">
+            <option value="">Selecteer...</option>
+            <option>🍽 Lunch / Diner</option>
+            <option>☕ Koffie / Dranken</option>
+            <option>🚂 OV / Trein</option>
+            <option>🅿 Parkeren</option>
+            <option>🏨 Overnachting</option>
+            <option>✈️ Vliegticket</option>
+            <option>📦 Kantoormateriaal</option>
+            <option>💻 Software / Abonnement</option>
+            <option>📱 Telefoon</option>
+            <option>🎓 Training / Cursus</option>
+            <option>🎁 Relatiegeschenk</option>
+            <option>🔧 Overig</option>
+          </select>
+        </div>
+        <div class="form-group full">
+          <label>Omschrijving</label>
+          <input type="text" id="otherDesc" placeholder="bijv. Lunch met klant XYZ">
+        </div>
+        <div class="form-group">
+          <label>Bedrag (€)</label>
+          <input type="number" id="otherAmount" placeholder="0,00" min="0" step="0.01">
+        </div>
+        <div class="form-group full">
+          <label>Foto (bonnetje)</label>
+          <div class="photo-upload">
+            <input type="file" accept="image/*" multiple onchange="handlePhotos(event)">
+            <div class="icon">📷</div>
+            <div class="hint">Klik of sleep foto's hiernaartoe</div>
+          </div>
+          <div class="photo-preview" id="photoPreview"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-footer">
+      <button class="btn btn-secondary" onclick="resetForm()">Wissen</button>
+      <button class="btn btn-primary"   onclick="addEntry()">Opslaan</button>
+    </div>
+  </div>
+
+  <div class="entries-header">
+    <h2 id="entriesTitle">Declaraties</h2>
+    <span id="entryCount" style="font-size:12px;color:var(--muted)"></span>
+  </div>
+  <div class="entries-list" id="entriesList"></div>
+
+</div>
+
+<!-- EXPORT MODAL -->
+<div class="modal-overlay" id="exportModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>⬇ Exporteer declaraties</h3>
+      <button class="modal-close" onclick="closeExportModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="color:var(--muted);margin-bottom:14px;font-size:13px">Kies wat je wil exporteren:</p>
+      <div class="export-options">
+        <div class="export-option selected" id="expCurrent" onclick="selectExport('current')">
+          <div class="eo-icon">📅</div>
+          <div class="eo-text"><strong id="expCurrentLabel">Huidige maand</strong><span>Alleen de geselecteerde maand</span></div>
+        </div>
+        <div class="export-option" id="expYear" onclick="selectExport('year')">
+          <div class="eo-icon">📆</div>
+          <div class="eo-text"><strong id="expYearLabel">Heel jaar</strong><span>Alle declaraties van dit jaar</span></div>
+        </div>
+        <div class="export-option" id="expAll" onclick="selectExport('all')">
+          <div class="eo-icon">📋</div>
+          <div class="eo-text"><strong>Alles</strong><span>Alle declaraties ooit ingevoerd</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeExportModal()">Annuleren</button>
+      <button class="btn btn-success"   onclick="doExport()">⬇ Download Excel</button>
+    </div>
+  </div>
+</div>
+
+<!-- DELETE MODAL -->
+<div class="modal-overlay" id="deleteModal">
+<div class="modal">
+  <div class="modal-header">
+    <h3>🗑 Verwijderen</h3>
+    <button class="modal-close" onclick="closeDeleteModal()">✕</button>
+  </div>
+  <div class="modal-body"><p>Weet je zeker dat je deze declaratie wil verwijderen?</p></div>
+  <div class="modal-footer">
+    <button class="btn btn-secondary" onclick="closeDeleteModal()">Annuleren</button>
+    <button class="btn btn-primary" style="background:var(--danger)" onclick="confirmDelete()">Verwijderen</button>
+  </div>
+</div>
+</div>
+
+<!-- LIGHTBOX -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <button class="lightbox-close">✕</button>
+  <img id="lightboxImg" src="" alt="">
+</div>
+
+<div class="toast" id="toast"></div>
+</body>
+</html>
