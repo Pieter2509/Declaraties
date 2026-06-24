@@ -239,7 +239,21 @@ textarea { resize: vertical; min-height: 58px; }
 </head>
 <body>
 
+<!-- ══ LOGIN SCHERM ══════════════════════════════════════════════ -->
+<div id="loginScreen" style="display:none; min-height:100vh; align-items:center; justify-content:center; padding:24px;">
+  <div style="background:white; border-radius:16px; padding:40px 32px; max-width:380px; width:100%; box-shadow:0 8px 32px rgba(0,0,0,.12); text-align:center;">
+    <div style="width:56px;height:56px;background:var(--accent);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:26px;margin:0 auto 20px;">🧾</div>
+    <h1 style="font-size:22px;font-weight:800;margin-bottom:8px;letter-spacing:-.5px;">Declaraties</h1>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:32px;line-height:1.6;">Log in met je Google-account om je declaraties te beheren.</p>
+    <button onclick="loginWithGoogle()" style="width:100%;padding:13px;border:1.5px solid var(--border);background:white;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:12px;transition:all .15s;" onmouseover="this.style.borderColor='var(--accent)';this.style.background='var(--accent-light)'" onmouseout="this.style.borderColor='var(--border)';this.style.background='white'">
+      <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      Inloggen met Google
+    </button>
+  </div>
+</div>
+
 <!-- ══ MAIN APP ══════════════════════════════════════════════════ -->
+<div id="appContent" style="display:none;">
 <div id="mainApp">
 
 <header>
@@ -250,6 +264,7 @@ textarea { resize: vertical; min-height: 58px; }
   <div class="header-right">
     <button class="btn btn-secondary btn-sm" onclick="openExportModal()">⬇ <span>Export</span></button>
     <button class="btn btn-secondary btn-sm btn-icon" onclick="openSettings()" title="Instellingen">⚙️</button>
+    <img id="userAvatar" style="width:30px;height:30px;border-radius:50%;object-fit:cover;border:2px solid var(--border);cursor:pointer;display:none;" onclick="logout()" title="Uitloggen">
   </div>
 </header>
 
@@ -402,6 +417,7 @@ textarea { resize: vertical; min-height: 58px; }
 
 </div>
 </div><!-- /mainApp -->
+</div><!-- /appContent -->
 
 <!-- EXPORT MODAL -->
 <div class="modal-overlay" id="exportModal">
@@ -447,7 +463,11 @@ textarea { resize: vertical; min-height: 58px; }
         <input type="number" id="settingWwKm" min="1">
         <p style="font-size:11px;color:var(--muted);margin-top:4px">Totaal: 2× deze waarde = heen + terug</p>
       </div>
-      <p style="font-size:11px;color:var(--muted)">Km-tarief: €0,23 per km (wettelijk tarief 2026)</p>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:14px">Km-tarief: €0,23 per km (wettelijk tarief 2026)</p>
+      <div style="border-top:1px solid var(--border);padding-top:14px;display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:12px;color:var(--muted)" id="userName">—</span>
+        <button class="btn btn-secondary btn-sm" onclick="logout();closeModal('settingsModal')" style="color:var(--danger);border-color:var(--danger)">Uitloggen</button>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('settingsModal')">Annuleren</button>
@@ -486,14 +506,18 @@ textarea { resize: vertical; min-height: 58px; }
 <!-- ══ FIREBASE SDK ══════════════════════════════════════════════ -->
 <script type="module">
 import { initializeApp }       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, onSnapshot }
+import { getFirestore, collection, addDoc, deleteDoc, doc, query, orderBy, onSnapshot }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 const KM_RATE = 0.23;
 const WW_KEY  = 'decl_ww_km';
 const MONTHS    = ['Januari','Februari','Maart','April','Mei','Juni','Juli','Augustus','September','Oktober','November','December'];
 
 let db          = null;
+let auth        = null;
+let currentUser = null;
 let unsubscribe = null;
 let allEntries  = [];
 let currentYear = new Date().getFullYear();
@@ -523,16 +547,53 @@ function getWwKm() {
 
 async function startApp() {
   const app = initializeApp(FIREBASE_CONFIG);
-  db = getFirestore(app);
+  db   = getFirestore(app);
+  auth = getAuth(app);
 
   const wwKmVal = getWwKm();
   document.getElementById('wwKmLabel').textContent = wwKmVal * 2;
   document.getElementById('settingWwKm').value = wwKmVal;
 
-  resetForm();
-  subscribeEntries();
-  updateMonthUI();
+  // Luister naar login-status — dit bepaalt wat de gebruiker ziet
+  onAuthStateChanged(auth, user => {
+    currentUser = user;
+    if (user) {
+      // Ingelogd: toon app, verberg login-scherm
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('appContent').style.display  = 'block';
+      document.getElementById('userAvatar').src  = user.photoURL || '';
+      document.getElementById('userAvatar').style.display = user.photoURL ? 'block' : 'none';
+      document.getElementById('userName').textContent = user.displayName || user.email;
+      resetForm();
+      subscribeEntries();
+      updateMonthUI();
+    } else {
+      // Uitgelogd: toon login-scherm
+      document.getElementById('loginScreen').style.display = 'flex';
+      document.getElementById('appContent').style.display  = 'none';
+      if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+    }
+    setLoading(false);
+  });
 }
+
+async function loginWithGoogle() {
+  try {
+    const provider = new GoogleAuthProvider();
+    await signInWithPopup(auth, provider);
+  } catch(e) {
+    console.error(e);
+    toast('❌ Inloggen mislukt. Probeer opnieuw.');
+    setLoading(false);
+  }
+}
+window.loginWithGoogle = loginWithGoogle;
+
+async function logout() {
+  await signOut(auth);
+  toast('Uitgelogd');
+}
+window.logout = logout;
 
 // ── REALTIME SYNC ─────────────────────────────────────────────────
 
