@@ -741,22 +741,82 @@ window.onKmChange = onKmChange;
 
 // ── PHOTOS ────────────────────────────────────────────────────────
 
-function handlePhotos(event, form) {
-  const files = Array.from(event.target.files);
-  const arr     = form === 'km' ? pendingKm   : pendingOther;
-  const preview = document.getElementById(form === 'km' ? 'kmPhotoPreview' : 'otherPhotoPreview');
-  files.forEach(file => {
+// Verkleint en comprimeert een foto in de browser zodat hij ruim onder de
+// Firestore-limiet van 1 MB per document blijft. Telefoonfoto's zijn anders
+// vaak 3 tot 8 MB en kunnen dan niet opgeslagen worden.
+function compressImage(file, opts = {}) {
+  const maxDim      = opts.maxDim      || 1280;       // max breedte/hoogte in px
+  const targetBytes = opts.targetBytes || 300 * 1024; // streefgrootte data-URL
+  return new Promise((resolve, reject) => {
+    // Niet-afbeeldingen (zou niet moeten, maar voor de zekerheid) ongemoeid laten
+    if (!file.type.startsWith('image/')) { reject(new Error('Geen afbeelding')); return; }
     const reader = new FileReader();
-    reader.onload = e => {
-      const idx = arr.push(e.target.result) - 1;
-      const wrap = document.createElement('div');
-      wrap.className = 'photo-thumb-wrap';
-      wrap.innerHTML = `<img class="photo-thumb" src="${e.target.result}" onclick="openLightbox('${e.target.result}')"><button class="photo-remove-btn" onclick="removePhoto(this,'${form}',${idx})" title="Verwijder">×</button>`;
-      preview.appendChild(wrap);
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          let w = img.naturalWidth  || img.width;
+          let h = img.naturalHeight || img.height;
+          if (w > maxDim || h > maxDim) {
+            if (w >= h) { h = Math.round(h * maxDim / w); w = maxDim; }
+            else        { w = Math.round(w * maxDim / h); h = maxDim; }
+          }
+          const draw = (cw, ch) => {
+            const canvas = document.createElement('canvas');
+            canvas.width = cw; canvas.height = ch;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#FFFFFF';            // witte achtergrond i.p.v. transparant
+            ctx.fillRect(0, 0, cw, ch);
+            ctx.drawImage(img, 0, 0, cw, ch);
+            return canvas;
+          };
+          let canvas  = draw(w, h);
+          let quality = 0.7;
+          let dataUrl = canvas.toDataURL('image/jpeg', quality);
+          // Stap 1: kwaliteit verlagen tot we onder de streefgrootte zitten
+          while (dataUrl.length > targetBytes && quality > 0.4) {
+            quality -= 0.1;
+            dataUrl = canvas.toDataURL('image/jpeg', quality);
+          }
+          // Stap 2: nog te groot? Afmetingen verkleinen tot het past
+          let guard = 0;
+          while (dataUrl.length > targetBytes && (w > 640 || h > 640) && guard < 6) {
+            w = Math.round(w * 0.8); h = Math.round(h * 0.8);
+            canvas  = draw(w, h);
+            dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+            guard++;
+          }
+          resolve(dataUrl);
+        } catch (err) { reject(err); }
+      };
+      img.onerror = () => reject(new Error('Afbeelding kon niet geladen worden'));
+      img.src = reader.result;
     };
+    reader.onerror = () => reject(new Error('Bestand kon niet gelezen worden'));
     reader.readAsDataURL(file);
   });
+}
+
+async function handlePhotos(event, form) {
+  const files = Array.from(event.target.files);
   event.target.value = '';
+  if (!files.length) return;
+  const arr     = form === 'km' ? pendingKm   : pendingOther;
+  const preview = document.getElementById(form === 'km' ? 'kmPhotoPreview' : 'otherPhotoPreview');
+  toast('⏳ Foto verwerken...');
+  for (const file of files) {
+    try {
+      const dataUrl = await compressImage(file, { maxDim: 1280, targetBytes: 300 * 1024 });
+      const idx = arr.push(dataUrl) - 1;
+      const wrap = document.createElement('div');
+      wrap.className = 'photo-thumb-wrap';
+      wrap.innerHTML = `<img class="photo-thumb" src="${dataUrl}" onclick="openLightbox('${dataUrl}')"><button class="photo-remove-btn" onclick="removePhoto(this,'${form}',${idx})" title="Verwijder">×</button>`;
+      preview.appendChild(wrap);
+    } catch (err) {
+      console.error('Fotoverwerking mislukt:', err);
+      toast('❌ Foto kon niet verwerkt worden');
+    }
+  }
 }
 window.handlePhotos = handlePhotos;
 
@@ -768,6 +828,13 @@ function removePhoto(btn, form, idx) {
 window.removePhoto = removePhoto;
 
 // ── ADD ENTRY ─────────────────────────────────────────────────────
+
+// Veiligheidsmarge: Firestore staat ~1 MB per document toe. We houden 900 KB
+// aan voor de foto's samen, zodat er ruimte blijft voor de overige velden.
+function photosTooLarge(photos) {
+  const total = photos.reduce((s, p) => s + (p ? p.length : 0), 0);
+  return total > 900 * 1024;
+}
 
 async function addEntry() {
   if (!db || !currentUser) return;
@@ -782,6 +849,7 @@ async function addEntry() {
       if (!km || km<=0) { toast('Vul een geldig aantal km in'); btn.disabled = false; return; }
       const route  = wwActive ? 'Woon-werk' : getRouteString();
       const photos = pendingKm.filter(Boolean);
+      if (photosTooLarge(photos)) { toast('❌ Foto\'s samen te groot, verwijder er een'); btn.disabled = false; return; }
       await addDoc(collection(db, 'declaraties'), {
         type: 'km', kmType: wwActive ? 'ww' : 'km',
         date, km, route, photos,
@@ -797,6 +865,7 @@ async function addEntry() {
       if (!type)              { toast('Selecteer een type'); btn.disabled = false; return; }
       if (!amount || amount<=0){ toast('Vul een geldig bedrag in'); btn.disabled = false; return; }
       const photos = pendingOther.filter(Boolean);
+      if (photosTooLarge(photos)) { toast('❌ Foto\'s samen te groot, verwijder er een'); btn.disabled = false; return; }
       await addDoc(collection(db, 'declaraties'), {
         type: 'other', declType: type, desc, date, amount, photos,
         uid: currentUser.uid,
