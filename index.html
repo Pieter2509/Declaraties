@@ -234,9 +234,7 @@ textarea { resize: vertical; min-height: 58px; }
   .header-right .btn span { display: none; }
 }
 
-.firebase-config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.firebase-config-grid .full { grid-column: 1/-1; }
-.config-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; display: block; margin-bottom: 3px; }
+
 </style>
 </head>
 <body>
@@ -449,10 +447,7 @@ textarea { resize: vertical; min-height: 58px; }
         <input type="number" id="settingWwKm" min="1">
         <p style="font-size:11px;color:var(--muted);margin-top:4px">Totaal: 2× deze waarde = heen + terug</p>
       </div>
-      <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px">
-        <p style="font-size:11px;color:var(--muted);margin-bottom:8px">Km-tarief: €0,23 per km (wettelijk tarief 2024)</p>
-        <button class="btn btn-secondary btn-sm" onclick="resetConfig()" style="color:var(--danger);border-color:var(--danger)">🔄 Firebase opnieuw instellen</button>
-      </div>
+      <p style="font-size:11px;color:var(--muted)">Km-tarief: €0,23 per km (wettelijk tarief 2026)</p>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('settingsModal')">Annuleren</button>
@@ -494,9 +489,8 @@ import { initializeApp }       from "https://www.gstatic.com/firebasejs/10.12.0/
 import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, onSnapshot }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-const KM_RATE   = 0.23;
-const CFG_KEY   = 'decl_firebase_cfg';
-const WW_KEY    = 'decl_ww_km';
+const KM_RATE = 0.23;
+const WW_KEY  = 'decl_ww_km';
 const MONTHS    = ['Januari','Februari','Maart','April','Mei','Juni','Juli','Augustus','September','Oktober','November','December'];
 
 let db          = null;
@@ -527,10 +521,11 @@ function getWwKm() {
   return parseInt(localStorage.getItem(WW_KEY) || '60', 10);
 }
 
-async function startApp(cfg, wwKmVal) {
-  const app = initializeApp(cfg);
+async function startApp() {
+  const app = initializeApp(FIREBASE_CONFIG);
   db = getFirestore(app);
 
+  const wwKmVal = getWwKm();
   document.getElementById('wwKmLabel').textContent = wwKmVal * 2;
   document.getElementById('settingWwKm').value = wwKmVal;
 
@@ -1124,13 +1119,6 @@ function saveSettings() {
 }
 window.saveSettings = saveSettings;
 
-function resetConfig() {
-  if (!confirm('Wil je de Firebase configuratie verwijderen en opnieuw instellen?')) return;
-  localStorage.removeItem(CFG_KEY);
-  location.reload();
-}
-window.resetConfig = resetConfig;
-
 // ── HELPERS ───────────────────────────────────────────────────────
 
 function formatEur(v) {
@@ -1168,27 +1156,14 @@ document.addEventListener('keydown', e => {
 // ── INIT ──────────────────────────────────────────────────────────
 
 (async () => {
-  const cfg = getConfig();
-  const wwKm = getWwKm();
-  if (cfg) {
-    setLoading(true);
-    try {
-      await startApp(cfg, wwKm);
-    } catch(e) {
-      console.error(e);
-      localStorage.removeItem(CFG_KEY);
-      setLoading(false);
-    }
-    setLoading(false);
+  setLoading(true);
+  try {
+    await startApp();
+  } catch(e) {
+    console.error('Firebase init mislukt:', e);
+    document.getElementById('syncDot').className = 'sync-dot err';
   }
-  // pre-fill setup fields if config exists
-  if (cfg) {
-    for (const [k,v] of Object.entries(cfg)) {
-      const el = document.getElementById('cfg_'+k);
-      if (el) el.value = v;
-    }
-    document.getElementById('cfg_wwKm').value = wwKm;
-  }
+  setLoading(false);
 })();
 </script>
 
