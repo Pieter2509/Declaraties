@@ -770,7 +770,7 @@ window.removePhoto = removePhoto;
 // ── ADD ENTRY ─────────────────────────────────────────────────────
 
 async function addEntry() {
-  if (!db) return;
+  if (!db || !currentUser) return;
   const btn = document.getElementById('addBtn');
   btn.disabled = true;
 
@@ -778,13 +778,14 @@ async function addEntry() {
     if (currentTab === 'km') {
       const date = document.getElementById('kmDate').value;
       const km   = parseFloat(document.getElementById('kmKm').value);
-      if (!date)       { toast('Vul een datum in'); return; }
-      if (!km || km<=0){ toast('Vul een geldig aantal km in'); return; }
-      const route = wwActive ? 'Woon-werk' : getRouteString();
+      if (!date)        { toast('Vul een datum in'); btn.disabled = false; return; }
+      if (!km || km<=0) { toast('Vul een geldig aantal km in'); btn.disabled = false; return; }
+      const route  = wwActive ? 'Woon-werk' : getRouteString();
       const photos = pendingKm.filter(Boolean);
       await addDoc(collection(db, 'declaraties'), {
         type: 'km', kmType: wwActive ? 'ww' : 'km',
         date, km, route, photos,
+        uid: currentUser.uid,
         createdAt: Date.now()
       });
     } else {
@@ -792,20 +793,21 @@ async function addEntry() {
       const type   = document.getElementById('otherType').value;
       const desc   = document.getElementById('otherDesc').value.trim();
       const amount = parseFloat(document.getElementById('otherAmount').value);
-      if (!date)         { toast('Vul een datum in'); return; }
-      if (!type)         { toast('Selecteer een type'); return; }
-      if (!amount||amount<=0){ toast('Vul een geldig bedrag in'); return; }
+      if (!date)              { toast('Vul een datum in'); btn.disabled = false; return; }
+      if (!type)              { toast('Selecteer een type'); btn.disabled = false; return; }
+      if (!amount || amount<=0){ toast('Vul een geldig bedrag in'); btn.disabled = false; return; }
       const photos = pendingOther.filter(Boolean);
       await addDoc(collection(db, 'declaraties'), {
         type: 'other', declType: type, desc, date, amount, photos,
+        uid: currentUser.uid,
         createdAt: Date.now()
       });
     }
     resetForm();
     toast('✓ Declaratie opgeslagen');
   } catch(e) {
-    toast('❌ Opslaan mislukt. Controleer verbinding.');
     console.error(e);
+    toast('❌ ' + (e.code === 'permission-denied' ? 'Geen toegang — controleer Firestore-regels' : 'Opslaan mislukt: ' + e.message));
   } finally {
     btn.disabled = false;
   }
