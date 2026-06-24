@@ -75,6 +75,29 @@ header h1 { font-size: 15px; font-weight: 700; letter-spacing: -.3px; }
 .sc-km .val { color: var(--km); }
 .sc-other .val { color: var(--accent); }
 
+/* ── CALENDAR ── */
+.cal-card { background: white; border: 1px solid var(--border); border-radius: var(--r); padding: 14px 16px; margin-bottom: 16px; box-shadow: var(--shadow); }
+.cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 11px; flex-wrap: wrap; gap: 8px; }
+.cal-title { font-size: 13px; font-weight: 700; }
+.cal-legend { display: flex; gap: 12px; }
+.cal-leg { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); font-weight: 600; }
+.cal-leg .cal-key { width: 9px; height: 9px; border-radius: 50%; }
+.cal-leg .cal-key.done { background: var(--success); }
+.cal-leg .cal-key.none { background: var(--border); }
+.cal-weekdays { display: grid; grid-template-columns: repeat(7,1fr); gap: 5px; margin-bottom: 5px; }
+.cal-weekdays div { text-align: center; font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 5px; }
+.cal-cell { aspect-ratio: 1 / 1; border-radius: var(--r-sm); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; background: var(--bg); border: 1.5px solid transparent; cursor: pointer; transition: all .15s; position: relative; }
+.cal-cell.empty { background: transparent; cursor: default; }
+.cal-cell.has { background: #ECFDF5; border-color: #A7F3D0; color: var(--success); font-weight: 800; }
+.cal-cell.has:hover { border-color: var(--success); }
+.cal-cell.no:hover { border-color: var(--accent); background: var(--accent-light); }
+.cal-cell.weekend:not(.has) { color: var(--muted); }
+.cal-cell.today { box-shadow: 0 0 0 2px var(--accent); }
+.cal-cell .cal-count { position: absolute; top: 3px; right: 5px; font-size: 9px; font-weight: 800; color: var(--success); }
+.cal-cell .cal-num { line-height: 1; }
+.cal-cell .cal-mark { font-size: 8px; line-height: 1; margin-top: 3px; height: 8px; color: var(--success); }
+
 /* ── FORM CARD ── */
 .form-card { background: white; border: 1px solid var(--border); border-radius: var(--r); padding: 18px; margin-bottom: 16px; box-shadow: var(--shadow); }
 .form-card-title { font-size: 13px; font-weight: 700; margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
@@ -294,6 +317,21 @@ textarea { resize: vertical; min-height: 58px; }
       <div class="lbl">💰 Totaal</div>
       <div class="val" id="sumTotal">€0,00</div>
     </div>
+  </div>
+
+  <!-- CALENDAR -->
+  <div class="cal-card">
+    <div class="cal-head">
+      <div class="cal-title">📅 Maandoverzicht</div>
+      <div class="cal-legend">
+        <span class="cal-leg"><span class="cal-key done"></span>Declaratie</span>
+        <span class="cal-leg"><span class="cal-key none"></span>Geen</span>
+      </div>
+    </div>
+    <div class="cal-weekdays">
+      <div>ma</div><div>di</div><div>wo</div><div>do</div><div>vr</div><div>za</div><div>zo</div>
+    </div>
+    <div class="cal-grid" id="calGrid"></div>
   </div>
 
   <!-- ADD FORM -->
@@ -642,6 +680,7 @@ function updateMonthUI() {
   document.getElementById('entriesTitle').textContent    = `Declaraties ${MONTHS[currentMonth]} ${currentYear}`;
   const n = entries.length;
   document.getElementById('entryCount').textContent = `${n} item${n !== 1 ? 's' : ''}`;
+  renderCalendar(entries);
   renderEntries(entries);
 }
 
@@ -900,6 +939,59 @@ function resetForm() {
   initStops();
 }
 window.resetForm = resetForm;
+
+// ── CALENDAR ──────────────────────────────────────────────────────
+
+function renderCalendar(entries) {
+  const grid = document.getElementById('calGrid');
+  if (!grid) return;
+
+  // Aantal declaraties per dag van de huidige maand
+  const counts = {};
+  entries.forEach(e => {
+    const d = new Date(e.date);
+    if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
+      const day = d.getDate();
+      counts[day] = (counts[day] || 0) + 1;
+    }
+  });
+
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  // getDay(): 0=zo..6=za. Omzetten naar maandag-start: 0=ma..6=zo
+  let firstDow = (new Date(currentYear, currentMonth, 1).getDay() + 6) % 7;
+
+  const today = new Date();
+  const isThisMonth = today.getFullYear() === currentYear && today.getMonth() === currentMonth;
+
+  let html = '';
+  for (let i = 0; i < firstDow; i++) html += `<div class="cal-cell empty"></div>`;
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dow     = (firstDow + day - 1) % 7;      // 5 = za, 6 = zo
+    const weekend = dow === 5 || dow === 6;
+    const n       = counts[day] || 0;
+    const has     = n > 0;
+    const isToday = isThisMonth && today.getDate() === day;
+    const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const cls = ['cal-cell', has ? 'has' : 'no', weekend ? 'weekend' : '', isToday ? 'today' : ''].filter(Boolean).join(' ');
+    const title = has ? `${n} declaratie${n > 1 ? 's' : ''}` : 'Geen declaratie';
+    html += `<div class="${cls}" onclick="pickCalDay('${dateStr}')" title="${title}">
+      ${n > 1 ? `<span class="cal-count">${n}</span>` : ''}
+      <span class="cal-num">${day}</span>
+      <span class="cal-mark">${has ? '●' : ''}</span>
+    </div>`;
+  }
+  grid.innerHTML = html;
+}
+
+// Klik op een dag: zet de datum klaar in het formulier en scroll ernaartoe
+function pickCalDay(dateStr) {
+  const km = document.getElementById('kmDate');    if (km) km.value = dateStr;
+  const ot = document.getElementById('otherDate'); if (ot) ot.value = dateStr;
+  const card = document.querySelector('.form-card');
+  if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+window.pickCalDay = pickCalDay;
 
 // ── RENDER ENTRIES ────────────────────────────────────────────────
 
