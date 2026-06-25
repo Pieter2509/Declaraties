@@ -1104,42 +1104,72 @@ window.doExport = doExport;
 // Foto's worden als PNG ingebed in de xlsx zip via drawing XML (native Excel images)
 
 async function buildExcelWithPhotos(data, filename) {
-  // ── 1. Bouw declaratietabel sheet XML ──────────────────────────
-  const kmTotal    = data.filter(e=>e.type==='km').reduce((s,e)=>s+e.km*KM_RATE,0);
-  const otherTotal = data.filter(e=>e.type==='other').reduce((s,e)=>s+e.amount,0);
+  // ── 1. Bouw declaratiesheet met twee aparte tabellen ───────────
+  const kmEntries    = data.filter(e => e.type === 'km');
+  const otherEntries = data.filter(e => e.type === 'other');
+  const kmTotal    = kmEntries.reduce((s,e) => s + e.km * KM_RATE, 0);
+  const otherTotal = otherEntries.reduce((s,e) => s + e.amount, 0);
 
-  const headers = ['Datum','Type','Route / Omschrijving','Kilometers','Tarief (€/km)','Bedrag (€)','Bonnetjes'];
-  const colWidths = [14,18,36,12,14,14,12];
+  const colWidths = [14, 20, 40, 12, 14, 14, 26];
+  const photoNote = e => (e.photos||[]).length > 0 ? `${(e.photos||[]).length} foto('s) → zie Bonnetjes` : '-';
 
-  // Bouw sheet1 data array
-  const sheetRows = [headers];
-  data.forEach(e => {
-    const isKm = e.type === 'km';
-    const amount = isKm ? e.km * KM_RATE : e.amount;
+  const sheetRows = [];
+  const merges = [];
+
+  // ── Tabel 1: Kilometers ──
+  merges.push({ s:{r:sheetRows.length,c:0}, e:{r:sheetRows.length,c:6} });
+  sheetRows.push(['🚗 KILOMETERDECLARATIES','','','','','','']);
+  sheetRows.push(['Datum','Type','Route','Kilometers','Tarief (€/km)','Bedrag (€)','Bonnetjes']);
+  kmEntries.forEach(e => {
     sheetRows.push([
       formatDate(e.date),
-      isKm ? (e.kmType==='ww' ? 'Woon-werk' : 'Kilometers') : (e.declType||'Overig'),
-      isKm ? (e.route||'') : (e.desc||''),
-      isKm ? e.km : '',
-      isKm ? KM_RATE : '',
-      parseFloat(amount.toFixed(2)),
-      (e.photos||[]).length > 0 ? `${(e.photos||[]).length} foto('s) → zie Bonnetjes` : '-',
+      e.kmType==='ww' ? 'Woon-werk' : 'Kilometers',
+      e.route||'',
+      e.km,
+      KM_RATE,
+      parseFloat((e.km*KM_RATE).toFixed(2)),
+      photoNote(e),
     ]);
   });
-  // Lege rij + totalen
-  sheetRows.push([]);
-  sheetRows.push(['TOTAAL KM VERGOEDING','','','','',parseFloat(kmTotal.toFixed(2)),'']);
-  sheetRows.push(['TOTAAL OVERIGE KOSTEN','','','','',parseFloat(otherTotal.toFixed(2)),'']);
-  sheetRows.push(['TOTAAL','','','','',parseFloat((kmTotal+otherTotal).toFixed(2)),'']);
+  if (kmEntries.length === 0) sheetRows.push(['Geen kilometerdeclaraties','','','','','','']);
+  sheetRows.push(['','','','','TOTAAL', parseFloat(kmTotal.toFixed(2)), '']);
+
+  // ── Scheiding tussen de tabellen ──
+  sheetRows.push(['']);
+  sheetRows.push(['']);
+
+  // ── Tabel 2: Overige kosten ──
+  merges.push({ s:{r:sheetRows.length,c:0}, e:{r:sheetRows.length,c:6} });
+  sheetRows.push(['🧾 OVERIGE KOSTEN','','','','','','']);
+  sheetRows.push(['Datum','Type','Omschrijving','','','Bedrag (€)','Bonnetjes']);
+  otherEntries.forEach(e => {
+    sheetRows.push([
+      formatDate(e.date),
+      e.declType||'Overig',
+      e.desc||'',
+      '',
+      '',
+      parseFloat(e.amount.toFixed(2)),
+      photoNote(e),
+    ]);
+  });
+  if (otherEntries.length === 0) sheetRows.push(['Geen overige kosten','','','','','','']);
+  sheetRows.push(['','','','','TOTAAL', parseFloat(otherTotal.toFixed(2)), '']);
+
+  // ── Eindtotaal ──
+  sheetRows.push(['']);
+  sheetRows.push(['','','','','TOTAAL ALLES', parseFloat((kmTotal+otherTotal).toFixed(2)), '']);
 
   const ws1 = XLSX.utils.aoa_to_sheet(sheetRows);
-  ws1['!cols'] = colWidths.map(w=>({wch:w}));
+  ws1['!cols']   = colWidths.map(w=>({wch:w}));
+  ws1['!merges'] = merges;
 
   // ── 2. Verzamel alle foto's met metadata ───────────────────────
   // Structuur: [{declLabel, photoIndex, base64, ext, imgIdx}]
   const allPhotos = [];
   let imgIdx = 0;
-  data.forEach((e,di) => {
+  const orderedForPhotos = [...kmEntries, ...otherEntries];
+  orderedForPhotos.forEach(e => {
     const isKm = e.type === 'km';
     const label = `${formatDate(e.date)} – ${isKm ? (e.kmType==='ww'?'Woon-werk':e.route||'Kilometers') : (e.desc||e.declType||'Declaratie')}`;
     (e.photos||[]).forEach((p, pi) => {
