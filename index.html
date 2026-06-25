@@ -1182,7 +1182,7 @@ async function buildExcelWithPhotos(data, filename) {
   // ── 3. Bouw Bonnetjes sheet XML ────────────────────────────────
   // Elke foto krijgt 2 rijen: label-rij + grote fotocel (via drawing)
   // We plaatsen foto's in kolom A, 1 per blok van PHOTO_ROWS rijen
-  const PHOTO_ROWS = 15; // hoogte per foto in rijen (~half zo groot als voorheen)
+  const PHOTO_ROWS = 8; // hoogte per foto in rijen (nogmaals gehalveerd)
   const ws2Rows = [];
   allPhotos.forEach((p, i) => {
     const startRow = i * (PHOTO_ROWS + 2); // +2 voor label + lege rij
