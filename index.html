@@ -520,20 +520,13 @@ const KM_RATE = 0.23;
 const WW_KEY = 'decl_ww_km';
 const MONTHS = ['Januari','Februari','Maart','April','Mei','Juni','Juli','Augustus','September','Oktober','November','December'];
 
-let db = null;
-let auth = null;
-let currentUser = null;
-let unsubscribe = null;
+let db = null, auth = null, currentUser = null, unsubscribe = null;
 let allEntries = [];
 let currentYear = new Date().getFullYear();
-let currentMonth= new Date().getMonth();
-let currentTab = 'km';
-let wwActive = false;
-let pendingKm = [];
-let pendingOther= [];
-let deleteId = null;
-let exportScope = 'current';
-let stopCount = 0;
+let currentMonth = new Date().getMonth();
+let currentTab = 'km', wwActive = false;
+let pendingKm = [], pendingOther = [];
+let deleteId = null, exportScope = 'current', stopCount = 0;
 
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyBuBCK6q4IixYA97d84dL3F6Nl7uT-l5XM",
@@ -550,11 +543,9 @@ async function startApp() {
   const app = initializeApp(FIREBASE_CONFIG);
   db = getFirestore(app);
   auth = getAuth(app);
-
   const wwKmVal = getWwKm();
   document.getElementById('wwKmLabel').textContent = wwKmVal * 2;
   document.getElementById('settingWwKm').value = wwKmVal;
-
   onAuthStateChanged(auth, user => {
     currentUser = user;
     if (user) {
@@ -563,9 +554,7 @@ async function startApp() {
       document.getElementById('userAvatar').src = user.photoURL || '';
       document.getElementById('userAvatar').style.display = user.photoURL ? 'block' : 'none';
       document.getElementById('userName').textContent = user.displayName || user.email;
-      resetForm();
-      subscribeEntries();
-      updateMonthUI();
+      resetForm(); subscribeEntries(); updateMonthUI();
     } else {
       document.getElementById('loginScreen').style.display = 'flex';
       document.getElementById('appContent').style.display = 'none';
@@ -576,14 +565,8 @@ async function startApp() {
 }
 
 async function loginWithGoogle() {
-  try {
-    const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
-  } catch(e) {
-    console.error(e);
-    toast('❌ Inloggen mislukt. Probeer opnieuw.');
-    setLoading(false);
-  }
+  try { await signInWithPopup(auth, new GoogleAuthProvider()); }
+  catch(e) { console.error(e); toast('❌ Inloggen mislukt. Probeer opnieuw.'); setLoading(false); }
 }
 window.loginWithGoogle = loginWithGoogle;
 
@@ -596,11 +579,7 @@ function subscribeEntries() {
   if (unsubscribe) unsubscribe();
   const q = query(collection(db, 'declaraties'), orderBy('date','desc'));
   unsubscribe = onSnapshot(q,
-    snapshot => {
-      allEntries = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      dot.className = 'sync-dot ok';
-      updateMonthUI();
-    },
+    snapshot => { allEntries = snapshot.docs.map(d => ({ id: d.id, ...d.data() })); dot.className = 'sync-dot ok'; updateMonthUI(); },
     err => { dot.className = 'sync-dot err'; console.error(err); }
   );
 }
@@ -617,17 +596,14 @@ function updateMonthUI() {
   document.getElementById('monthLabel').textContent = `${MONTHS[currentMonth]} ${currentYear}`;
   document.getElementById('expCurrentLabel').textContent = `${MONTHS[currentMonth]} ${currentYear}`;
   document.getElementById('expYearLabel').textContent = `Heel ${currentYear}`;
-
   const entries = getMonthEntries();
   const kmTotal = entries.filter(e => e.kmType === 'km' || e.kmType === 'ww').reduce((s,e) => s + e.km * KM_RATE, 0);
   const otherTotal = entries.filter(e => e.type === 'other').reduce((s,e) => s + e.amount, 0);
   const total = kmTotal + otherTotal;
-
   document.getElementById('sumKm').textContent = formatEur(kmTotal);
   document.getElementById('sumOther').textContent = formatEur(otherTotal);
   document.getElementById('sumTotal').textContent = formatEur(total);
   document.getElementById('monthTotalLabel').textContent = formatEur(total);
-
   document.getElementById('entriesTitle').textContent = `Declaraties ${MONTHS[currentMonth]} ${currentYear}`;
   const n = entries.length;
   document.getElementById('entryCount').textContent = `${n} item${n !== 1 ? 's' : ''}`;
@@ -635,10 +611,8 @@ function updateMonthUI() {
 }
 
 function getMonthEntries() {
-  return allEntries.filter(e => {
-    const d = new Date(e.date);
-    return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
-  }).sort((a,b) => new Date(b.date) - new Date(a.date));
+  return allEntries.filter(e => { const d = new Date(e.date); return d.getFullYear() === currentYear && d.getMonth() === currentMonth; })
+    .sort((a,b) => new Date(b.date) - new Date(a.date));
 }
 
 function switchTab(tab) {
@@ -652,28 +626,18 @@ window.switchTab = switchTab;
 
 function toggleWW() {
   wwActive = !wwActive;
-  const row = document.getElementById('wwToggle');
-  row.classList.toggle('active', wwActive);
+  document.getElementById('wwToggle').classList.toggle('active', wwActive);
   const routeSection = document.getElementById('routeSection');
   const kmInput = document.getElementById('kmKm');
-  if (wwActive) {
-    const wwKm = getWwKm() * 2;
-    kmInput.value = wwKm;
-    kmInput.readOnly = true;
-    routeSection.style.display = 'none';
-  } else {
-    kmInput.readOnly = false;
-    kmInput.value = '';
-    routeSection.style.display = 'block';
-  }
+  if (wwActive) { kmInput.value = getWwKm() * 2; kmInput.readOnly = true; routeSection.style.display = 'none'; }
+  else { kmInput.readOnly = false; kmInput.value = ''; routeSection.style.display = 'block'; }
   onKmChange();
 }
 window.toggleWW = toggleWW;
 
 function initStops() {
   stopCount = 0;
-  const list = document.getElementById('stopsList');
-  list.innerHTML = '';
+  document.getElementById('stopsList').innerHTML = '';
   addStop('🏢', 'Kantoor / vertrekpunt');
   addStop('📍', 'Bestemming');
 }
@@ -681,7 +645,6 @@ function addStop(icon, placeholder) {
   stopCount++;
   const id = 'stop_' + stopCount;
   const isFirst = document.getElementById('stopsList').children.length === 0;
-  const list = document.getElementById('stopsList');
   const row = document.createElement('div');
   row.className = 'stop-row';
   row.id = 'stoprow_' + stopCount;
@@ -690,27 +653,21 @@ function addStop(icon, placeholder) {
     <input class="stop-input" type="text" id="${id}" placeholder="${placeholder || 'Tussenstop'}">
     ${!isFirst ? `<button class="stop-remove" onclick="removeStop('stoprow_${stopCount}')" title="Verwijder">×</button>` : ''}
   `;
-  list.appendChild(row);
+  document.getElementById('stopsList').appendChild(row);
 }
 window.addStop = function() { addStop(); };
 function removeStop(rowId) { const el = document.getElementById(rowId); if (el) el.remove(); }
 window.removeStop = removeStop;
 function getRouteString() {
-  const stops = [...document.getElementById('stopsList').querySelectorAll('input')]
-    .map(i => i.value.trim()).filter(Boolean);
-  return stops.join(' → ');
+  return [...document.getElementById('stopsList').querySelectorAll('input')].map(i => i.value.trim()).filter(Boolean).join(' → ');
 }
 
 function onKmChange() {
   const km = parseFloat(document.getElementById('kmKm').value) || 0;
   const el = document.getElementById('kmPreview');
   const txt = document.getElementById('kmPreviewText');
-  if (km > 0) {
-    el.classList.add('visible');
-    txt.textContent = `${km} km × €${KM_RATE.toFixed(2)} = ${formatEur(km * KM_RATE)}`;
-  } else {
-    el.classList.remove('visible');
-  }
+  if (km > 0) { el.classList.add('visible'); txt.textContent = `${km} km × €${KM_RATE.toFixed(2)} = ${formatEur(km * KM_RATE)}`; }
+  else el.classList.remove('visible');
 }
 window.onKmChange = onKmChange;
 
@@ -733,8 +690,7 @@ function handlePhotos(event, form) {
 }
 window.handlePhotos = handlePhotos;
 function removePhoto(btn, form, idx) {
-  const arr = form === 'km' ? pendingKm : pendingOther;
-  arr[idx] = null;
+  (form === 'km' ? pendingKm : pendingOther)[idx] = null;
   btn.parentElement.remove();
 }
 window.removePhoto = removePhoto;
@@ -750,10 +706,9 @@ async function addEntry() {
       if (!date) { toast('Vul een datum in'); btn.disabled = false; return; }
       if (!km || km<=0) { toast('Vul een geldig aantal km in'); btn.disabled = false; return; }
       const route = wwActive ? 'Woon-werk' : getRouteString();
-      const photos = pendingKm.filter(Boolean);
       await addDoc(collection(db, 'declaraties'), {
-        type: 'km', kmType: wwActive ? 'ww' : 'km',
-        date, km, route, photos, uid: currentUser.uid, createdAt: Date.now()
+        type: 'km', kmType: wwActive ? 'ww' : 'km', date, km, route,
+        photos: pendingKm.filter(Boolean), uid: currentUser.uid, createdAt: Date.now()
       });
     } else {
       const date = document.getElementById('otherDate').value;
@@ -763,10 +718,9 @@ async function addEntry() {
       if (!date) { toast('Vul een datum in'); btn.disabled = false; return; }
       if (!type) { toast('Selecteer een type'); btn.disabled = false; return; }
       if (!amount || amount<=0){ toast('Vul een geldig bedrag in'); btn.disabled = false; return; }
-      const photos = pendingOther.filter(Boolean);
       await addDoc(collection(db, 'declaraties'), {
         type: 'other', declType: type, desc, date, amount,
-        photos, uid: currentUser.uid, createdAt: Date.now()
+        photos: pendingOther.filter(Boolean), uid: currentUser.uid, createdAt: Date.now()
       });
     }
     resetForm();
@@ -774,9 +728,7 @@ async function addEntry() {
   } catch(e) {
     console.error(e);
     toast('❌ ' + (e.code === 'permission-denied' ? 'Geen toegang — controleer Firestore-regels' : 'Opslaan mislukt: ' + e.message));
-  } finally {
-    btn.disabled = false;
-  }
+  } finally { btn.disabled = false; }
 }
 window.addEntry = addEntry;
 
@@ -805,8 +757,7 @@ function renderEntries(entries) {
     return;
   }
   list.innerHTML = entries.map(e => {
-    const isKm = e.type === 'km';
-    const isWW = e.kmType === 'ww';
+    const isKm = e.type === 'km', isWW = e.kmType === 'ww';
     const amount = isKm ? e.km * KM_RATE : e.amount;
     const photos = e.photos || [];
     const badgeClass = isWW ? 'badge-ww' : (isKm ? 'badge-km' : 'badge-other');
@@ -830,9 +781,7 @@ function renderEntries(entries) {
         </div>
         <div class="entry-right">
           <div class="entry-amount ${amtClass}">${formatEur(amount)}</div>
-          <div class="entry-actions">
-            <button class="entry-del" onclick="openDelete('${e.id}')">🗑</button>
-          </div>
+          <div class="entry-actions"><button class="entry-del" onclick="openDelete('${e.id}')">🗑</button></div>
         </div>
       </div>
       ${photos.length ? `<div class="entry-photos">${photos.map(p=>`<img class="photo-thumb" src="${p}" onclick="openLightbox('${p}')">`).join('')}</div>` : ''}
@@ -857,8 +806,7 @@ window.openExportModal = openExportModal;
 function selectExport(scope) {
   exportScope = scope;
   ['current','year','all'].forEach(s => {
-    const cap = s.charAt(0).toUpperCase()+s.slice(1);
-    document.getElementById('exp'+cap).classList.toggle('selected', s===scope);
+    document.getElementById('exp'+s.charAt(0).toUpperCase()+s.slice(1)).classList.toggle('selected', s===scope);
   });
 }
 window.selectExport = selectExport;
@@ -873,8 +821,9 @@ function getTravelCol(entry) {
   if (t.includes('relatie') || t.includes('entertainment')) return 'K';
   return 'L';
 }
-function formatDateEN(dateStr) {
-  return new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+// Datum altijd als nette tekst "02 Jun 2026" — onafhankelijk van celnotatie
+function fmtDateEN(d) {
+  return new Date(d).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
 }
 function getDescriptionEN(entry) {
   if (entry.type === 'km') {
@@ -882,18 +831,12 @@ function getDescriptionEN(entry) {
     return entry.route || 'Kilometers';
   }
   const typeMap = {
-    '🍽 Lunch / Diner': 'Lunch / Dinner',
-    '☕ Koffie / Dranken': 'Coffee / Drinks',
-    '🚂 OV / Trein': 'Public Transport / Train',
-    '🅿 Parkeren': 'Parking',
-    '🏨 Overnachting': 'Accommodation',
-    '✈️ Vliegticket': 'Flight ticket',
-    '📦 Kantoormateriaal': 'Office supplies',
-    '💻 Software / Abonnement': 'Software / Subscription',
-    '📱 Telefoon': 'Phone',
-    '🎓 Training / Cursus': 'Training / Course',
-    '🎁 Relatiegeschenk': 'Business gift',
-    '🔧 Overig': 'Other',
+    '🍽 Lunch / Diner': 'Lunch / Dinner', '☕ Koffie / Dranken': 'Coffee / Drinks',
+    '🚂 OV / Trein': 'Public Transport / Train', '🅿 Parkeren': 'Parking',
+    '🏨 Overnachting': 'Accommodation', '✈️ Vliegticket': 'Flight ticket',
+    '📦 Kantoormateriaal': 'Office supplies', '💻 Software / Abonnement': 'Software / Subscription',
+    '📱 Telefoon': 'Phone', '🎓 Training / Cursus': 'Training / Course',
+    '🎁 Relatiegeschenk': 'Business gift', '🔧 Overig': 'Other',
   };
   const typeEN = typeMap[entry.declType] || entry.declType || 'Other';
   return entry.desc ? `${typeEN} – ${entry.desc}` : typeEN;
@@ -904,13 +847,8 @@ async function generateTravelExpense() {
   if (data.length === 0) { toast('Geen declaraties voor deze maand'); return; }
   toast('⏳ Travel Expense Report wordt aangemaakt...');
   setLoading(true);
-  try {
-    await buildTravelExpenseReport(data);
-    toast('✓ Travel Expense Report gedownload');
-  } catch(e) {
-    console.error(e);
-    toast('❌ Genereren mislukt: ' + e.message);
-  }
+  try { await buildTravelExpenseReport(data); toast('✓ Travel Expense Report gedownload'); }
+  catch(e) { console.error(e); toast('❌ Genereren mislukt: ' + e.message); }
   setLoading(false);
 }
 window.generateTravelExpense = generateTravelExpense;
@@ -918,18 +856,13 @@ window.generateTravelExpense = generateTravelExpense;
 // ── TRAVEL EXPENSE REPORT — template invullen + tabblad Bonnetjes ──
 async function buildTravelExpenseReport(data) {
   data = [...data].sort((a,b) => new Date(a.date) - new Date(b.date));
-
-  const monthNamesEN = ['January','February','March','April','May','June',
-    'July','August','September','October','November','December'];
+  const monthNamesEN = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const monthEN  = monthNamesEN[currentMonth];
   const firstDay = new Date(currentYear, currentMonth, 1);
   const lastDay  = new Date(currentYear, currentMonth + 1, 0);
-
   const rows = buildTravelRows(data);
 
-  const templateBytes = base64ToUint8(TRAVEL_TEMPLATE_B64);
-  const zip = await JSZip.loadAsync(templateBytes);
-
+  const zip = await JSZip.loadAsync(base64ToUint8(TRAVEL_TEMPLATE_B64));
   const relsXml = await zip.file('xl/_rels/workbook.xml.rels').async('string');
   const sheetPath = (() => {
     const m = relsXml.match(/Id="rId1"[^>]*Target="([^"]+)"/);
@@ -937,60 +870,52 @@ async function buildTravelExpenseReport(data) {
   })();
   let sheetXml = await zip.file(sheetPath).async('string');
 
+  // Schrijf cel maar behoud bestaande stijl (randen/notatie)
   function setCellValue(xml, cellRef, value, type) {
-    const cellRegex = new RegExp(`<c r="${cellRef}"[^>]*>(?:[^<]|<(?!c ))*?</c>`, 'g');
-    xml = xml.replace(cellRegex, '');
+    let style = '';
+    const existing = xml.match(new RegExp(`<c r="${cellRef}"([^>]*?)(?:/>|>)`));
+    if (existing) { const sm = existing[1].match(/ s="\d+"/); if (sm) style = sm[0]; }
+    xml = xml.replace(new RegExp(`<c r="${cellRef}"[^>]*?(?:/>|>[\\s\\S]*?</c>)`, 'g'), '');
     const row = cellRef.replace(/[A-Z]+/, '');
     const rowRegex = new RegExp(`(<row[^>]*r="${row}"[^>]*>)(.*?)(</row>)`, 's');
     let newCell;
-    if (type === 'n')      newCell = `<c r="${cellRef}" t="n"><v>${value}</v></c>`;
-    else if (type === 'f') newCell = `<c r="${cellRef}"><f>${escXml(String(value).replace(/^=/,''))}</f></c>`;
-    else if (type === 'd') newCell = `<c r="${cellRef}" s="1"><v>${dateToSerial(value)}</v></c>`;
-    else                   newCell = `<c r="${cellRef}" t="inlineStr"><is><t>${escXml(String(value))}</t></is></c>`;
+    if (type === 'n')      newCell = `<c r="${cellRef}"${style} t="n"><v>${value}</v></c>`;
+    else if (type === 'f') newCell = `<c r="${cellRef}"${style}><f>${escXml(String(value).replace(/^=/,''))}</f></c>`;
+    else                   newCell = `<c r="${cellRef}"${style} t="inlineStr"><is><t>${escXml(String(value))}</t></is></c>`;
     xml = xml.replace(rowRegex, (match, open, content, close) => {
       const colOrder = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O'];
-      const newCol = cellRef.match(/([A-Z]+)/)[1];
-      const newIdx = colOrder.indexOf(newCol);
+      const newIdx = colOrder.indexOf(cellRef.match(/([A-Z]+)/)[1]);
       const cellsInRow = [...content.matchAll(/<c r="([A-Z]+)\d+"[^>]*>/g)];
       let inserted = false, newContent = content;
       for (const m of cellsInRow) {
-        if (colOrder.indexOf(m[1]) > newIdx) {
-          newContent = newContent.replace(m[0], newCell + m[0]);
-          inserted = true; break;
-        }
+        if (colOrder.indexOf(m[1]) > newIdx) { newContent = newContent.replace(m[0], newCell + m[0]); inserted = true; break; }
       }
       if (!inserted) newContent += newCell;
       return open + newContent + close;
     });
     return xml;
   }
-  function dateToSerial(d) {
-    const epoch = new Date(1899, 11, 30);
-    return Math.round((d - epoch) / 86400000);
+  // Leeg cel maar behoud stijl
+  function clearCell(xml, ref) {
+    return xml.replace(new RegExp(`<c r="${ref}"([^>]*?)(?:/>|>[\\s\\S]*?</c>)`),
+      (m, attrs) => { const sm = attrs.match(/ s="\d+"/); return `<c r="${ref}"${sm?sm[0]:''}/>`; });
   }
 
-  // ── Wis bestaande data-rijen 12–21 ──
-  const dataCols = ['A','B','G','H','I','J','K','L'];
-  for (let r = 12; r <= 21; r++) for (const col of dataCols) {
-    const cellRegex = new RegExp(`<c r="${col}${r}"[^>]*(?:/>|>[\\s\\S]*?</c>)`, 'g');
-    sheetXml = sheetXml.replace(cellRegex, '');
-  }
-
-  // ── Bij meer dan 10 posten: extra rijen invoegen ──
   const extra   = Math.max(0, rows.length - 10);
-  const lastRow = 11 + rows.length; // = 21 + extra
+  const lastRow = 11 + rows.length;
   if (extra > 0) sheetXml = expandTemplateRows(sheetXml, extra);
 
-  // ── Duration ──
-  sheetXml = setCellValue(sheetXml, 'C7', firstDay, 'd');
-  sheetXml = setCellValue(sheetXml, 'E7', lastDay, 'd');
+  const allCols = ['A','H','I','J','K','L','M','N','O'];
+  for (let r = 12; r <= lastRow; r++) for (const col of allCols) sheetXml = clearCell(sheetXml, `${col}${r}`);
 
-  // ── Alle datarijen schrijven ──
+  // Duration als tekst
+  sheetXml = setCellValue(sheetXml, 'C7', fmtDateEN(firstDay), 's');
+  sheetXml = setCellValue(sheetXml, 'E7', fmtDateEN(lastDay), 's');
+
+  // Datarijen (datum als tekst, plus per-rij Total-formules)
   for (let i = 0; i < rows.length; i++) {
     const r = 12 + i, row = rows[i];
-    sheetXml = (row.date instanceof Date)
-      ? setCellValue(sheetXml, `A${r}`, row.date, 'd')
-      : setCellValue(sheetXml, `A${r}`, row.date, 's');
+    sheetXml = setCellValue(sheetXml, `A${r}`, row.date, 's');
     sheetXml = setCellValue(sheetXml, `B${r}`, row.desc, 's');
     sheetXml = setCellValue(sheetXml, `G${r}`, 'EUR', 's');
     if (row.H) sheetXml = setCellValue(sheetXml, `H${r}`, row.H, 'n');
@@ -998,17 +923,21 @@ async function buildTravelExpenseReport(data) {
     if (row.J) sheetXml = setCellValue(sheetXml, `J${r}`, row.J, 'n');
     if (row.K) sheetXml = setCellValue(sheetXml, `K${r}`, row.K, 'n');
     if (row.L) sheetXml = setCellValue(sheetXml, `L${r}`, row.L, 'n');
+    sheetXml = setCellValue(sheetXml, `M${r}`, `SUM(H${r}:L${r})`, 'f');
+    sheetXml = setCellValue(sheetXml, `N${r}`, 1, 'n');
+    sheetXml = setCellValue(sheetXml, `O${r}`, `M${r}*N${r}`, 'f');
   }
 
-  // ── Subtotaal-formules herstellen én uitbreiden tot lastRow ──
-  sheetXml = sheetXml.replace(/<f>SUM\(H21:H21\)<\/f>/, `<f>SUM(H12:H${lastRow})</f>`);
-  sheetXml = sheetXml.replace(/<f>I16<\/f>/,            `<f>SUM(I12:I${lastRow})</f>`);
+  // Subtotaal/totaal-bereiken uitbreiden tot lastRow
   sheetXml = sheetXml.replace(/<f>([\s\S]*?)<\/f>/g, (s, f) =>
-    `<f>${f.replace(/([A-Z]+)12:\1 ?21\b/g, (mm, c) => `${c}12:${c}${lastRow}`)}</f>`);
+    `<f>${f
+      .replace(/SUM\(([A-Z]+)12:\1\s*21\)/g, (mm, c) => `SUM(${c}12:${c}${lastRow})`)
+      .replace(/SUM\(([A-Z]+)21:\1\s*21\)/g, (mm, c) => `SUM(${c}12:${c}${lastRow})`)
+    }</f>`);
 
+  if (extra > 0) await shiftSheet1Drawing(zip, extra);
   zip.file(sheetPath, sheetXml);
 
-  // ── Tweede tabblad: alle bonnetjes ──
   await addReceiptsSheet(zip, data);
 
   const blob = await zip.generateAsync({
@@ -1024,111 +953,86 @@ async function buildTravelExpenseReport(data) {
   setTimeout(() => URL.revokeObjectURL(url), 3000);
 }
 
-// ── Breidt de 10 datarijen (12–21) uit met `extra` rijen, met behoud van opmaak ──
+// Schuift drawing1 (logo e.d.) `extra` rijen omlaag
+async function shiftSheet1Drawing(zip, extra) {
+  const path = 'xl/drawings/drawing1.xml';
+  const file = zip.file(path);
+  if (!file) return;
+  let xml = await file.async('string');
+  xml = xml.replace(/<xdr:row>(\d+)<\/xdr:row>/g, (m, n) => `<xdr:row>${+n + extra}</xdr:row>`);
+  zip.file(path, xml);
+}
+
+// Breidt datarijen 12–21 uit met `extra` rijen, opmaak behouden
 function expandTemplateRows(xml, extra) {
   if (extra <= 0) return xml;
-  const CLONE_FROM = 20;
-  const LAST_DATA  = 21;
-
+  const CLONE_FROM = 20, LAST_DATA = 21;
   const shiftRefs = (rowXml, delta) => rowXml
     .replace(/(<row r=")(\d+)(")/, (s,a,n,b) => a + (+n + delta) + b)
     .replace(/(<c r="[A-Z]+)(\d+)(")/g, (s,a,n,b) => a + (+n + delta) + b);
-
   const sd = xml.match(/(<sheetData[^>]*>)([\s\S]*?)(<\/sheetData>)/);
   const rowRe = /<row r="(\d+)"[^>]*\/>|<row r="(\d+)"[^>]*>[\s\S]*?<\/row>/g;
   const rows = [];
   let m;
   while ((m = rowRe.exec(sd[2])) !== null) rows.push({ num: +(m[1]||m[2]), xml: m[0] });
-
   let cloneTpl = (rows.find(r => r.num === CLONE_FROM) || {}).xml || '';
-  cloneTpl = cloneTpl
-    .replace(/<v>[\s\S]*?<\/v>/g, '')
-    .replace(/<f>[\s\S]*?<\/f>/g, '')
-    .replace(/<is>[\s\S]*?<\/is>/g, '')
-    .replace(/ t="[^"]*"/g, '');
-
+  cloneTpl = cloneTpl.replace(/<v>[\s\S]*?<\/v>/g, '').replace(/<f>[\s\S]*?<\/f>/g, '').replace(/<is>[\s\S]*?<\/is>/g, '').replace(/ t="[^"]*"/g, '');
   let body = '';
   for (const r of rows) {
     if (r.num < LAST_DATA) {
       body += r.xml;
-      if (r.num === CLONE_FROM) {
-        for (let i = 1; i <= extra; i++) body += shiftRefs(cloneTpl, i);
-      }
-    } else {
-      body += shiftRefs(r.xml, extra);
-    }
+      if (r.num === CLONE_FROM) for (let i = 1; i <= extra; i++) body += shiftRefs(cloneTpl, i);
+    } else body += shiftRefs(r.xml, extra);
   }
   xml = xml.replace(sd[0], sd[1] + body + sd[3]);
-
   const mb = xml.match(/<mergeCells count="\d+">([\s\S]*?)<\/mergeCells>/);
   if (mb) {
-    const merges = [...mb[1].matchAll(/<mergeCell ref="([A-Z]+)(\d+):([A-Z]+)(\d+)"\/>/g)]
-      .map(x => ({ c1:x[1], r1:+x[2], c2:x[3], r2:+x[4] }));
+    const merges = [...mb[1].matchAll(/<mergeCell ref="([A-Z]+)(\d+):([A-Z]+)(\d+)"\/>/g)].map(x => ({ c1:x[1], r1:+x[2], c2:x[3], r2:+x[4] }));
     const shift = n => n >= LAST_DATA ? n + extra : n;
     const result = merges.map(x => `<mergeCell ref="${x.c1}${shift(x.r1)}:${x.c2}${shift(x.r2)}"/>`);
     const cloneM = merges.filter(x => x.r1 === CLONE_FROM && x.r2 === CLONE_FROM);
-    for (let i = 1; i <= extra; i++)
-      for (const cm of cloneM)
-        result.push(`<mergeCell ref="${cm.c1}${CLONE_FROM+i}:${cm.c2}${CLONE_FROM+i}"/>`);
-    xml = xml.replace(/<mergeCells count="\d+">[\s\S]*?<\/mergeCells>/,
-      `<mergeCells count="${result.length}">${result.join('')}</mergeCells>`);
+    for (let i = 1; i <= extra; i++) for (const cm of cloneM) result.push(`<mergeCell ref="${cm.c1}${CLONE_FROM+i}:${cm.c2}${CLONE_FROM+i}"/>`);
+    xml = xml.replace(/<mergeCells count="\d+">[\s\S]*?<\/mergeCells>/, `<mergeCells count="${result.length}">${result.join('')}</mergeCells>`);
   }
   return xml;
 }
 
-// ── Rijen voor het overzicht: woon-werk samengevoegd, al het andere per item ──
+// Woon-werk samengevoegd, al het andere per item (geen limiet)
 function buildTravelRows(data) {
   const rows = [];
   const wwEntries    = data.filter(e => e.type === 'km' && e.kmType === 'ww');
   const kmEntries    = data.filter(e => e.type === 'km' && e.kmType !== 'ww');
   const otherEntries = data.filter(e => e.type === 'other');
-
   if (wwEntries.length > 0) {
     const totalAmt = parseFloat((wwEntries.reduce((s,e)=>s+e.km,0)*KM_RATE).toFixed(2));
     const dates = wwEntries.map(e => new Date(e.date));
     const minD = new Date(Math.min(...dates)), maxD = new Date(Math.max(...dates));
-    const dateStr = minD.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) +
-      ' \u2013 ' + maxD.toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
-    rows.push({
-      date: dateStr,
-      desc: `Home \u2194 Office commute (${wwEntries.length}\u00d7 ${wwEntries[0].km} km)`,
-      currency: 'EUR', J: totalAmt
-    });
+    const dateStr = minD.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) + ' \u2013 ' + maxD.toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
+    rows.push({ date: dateStr, desc: `Home \u2194 Office commute (${wwEntries.length}\u00d7 ${wwEntries[0].km} km)`, currency: 'EUR', J: totalAmt });
   }
-
-  kmEntries.forEach(e => rows.push({
-    date: new Date(e.date + 'T12:00:00'),
-    desc: e.route || 'Kilometers',
-    currency: 'EUR', J: parseFloat((e.km*KM_RATE).toFixed(2))
-  }));
-
+  kmEntries.forEach(e => rows.push({ date: fmtDateEN(e.date), desc: e.route || 'Kilometers', currency: 'EUR', J: parseFloat((e.km*KM_RATE).toFixed(2)) }));
   otherEntries.forEach(e => {
-    const r = { date: new Date(e.date + 'T12:00:00'), desc: getDescriptionEN(e), currency:'EUR' };
+    const r = { date: fmtDateEN(e.date), desc: getDescriptionEN(e), currency:'EUR' };
     r[getTravelCol(e)] = parseFloat(e.amount.toFixed(2));
     rows.push(r);
   });
-
   return rows;
 }
 
-// ── Voegt tabblad "Bonnetjes" met ingebedde foto's toe ──
+// Tabblad "Bonnetjes" met ingebedde foto's
 async function addReceiptsSheet(zip, data) {
   const photos = [];
   let n = 0;
   data.forEach(e => {
     const isKm = e.type === 'km';
-    const label = `${formatDate(e.date)} \u2013 ${isKm
-      ? (e.kmType==='ww' ? 'Woon-werk' : (e.route||'Kilometers'))
-      : (e.desc || e.declType || 'Declaratie')}`;
+    const label = `${formatDate(e.date)} \u2013 ${isKm ? (e.kmType==='ww' ? 'Woon-werk' : (e.route||'Kilometers')) : (e.desc || e.declType || 'Declaratie')}`;
     (e.photos||[]).forEach((p, pi) => {
       const ext = p.startsWith('data:image/png') ? 'png' : 'jpeg';
       const b64 = p.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, '');
       photos.push({ label, photoIndex: pi+1, base64: b64, ext, n: n++ });
     });
   });
-
   const PHOTO_ROWS = 30;
-
   let rowsXml = '';
   if (photos.length === 0) {
     rowsXml = `<row r="1"><c r="A1" t="inlineStr"><is><t>Geen bonnetjes bijgevoegd voor deze periode.</t></is></c></row>`;
@@ -1140,14 +1044,12 @@ async function addReceiptsSheet(zip, data) {
       r += PHOTO_ROWS + 2;
     });
   }
-
   const sheet2Xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
     `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
     `<dimension ref="A1"/><sheetViews><sheetView workbookViewId="0"/></sheetViews>` +
     `<sheetFormatPr defaultRowHeight="15"/><cols><col min="1" max="1" width="80" customWidth="1"/></cols>` +
     `<sheetData>${rowsXml}</sheetData>${photos.length ? '<drawing r:id="rId1"/>' : ''}</worksheet>`;
   zip.file('xl/worksheets/sheet2.xml', sheet2Xml);
-
   if (photos.length > 0) {
     photos.forEach(p => zip.file(`xl/media/bonnetje${p.n+1}.${p.ext}`, base64ToUint8(p.base64)));
     zip.file('xl/drawings/drawing2.xml', buildReceiptDrawingXml(photos));
@@ -1157,20 +1059,15 @@ async function addReceiptsSheet(zip, data) {
       `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
       `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing2.xml"/></Relationships>`);
   }
-
   let wbXml  = await zip.file('xl/workbook.xml').async('string');
   let wbRels = await zip.file('xl/_rels/workbook.xml.rels').async('string');
   const ridNums = [...wbRels.matchAll(/Id="rId(\d+)"/g)].map(m=>+m[1]);
   const newRid = 'rId' + (Math.max(0, ...ridNums) + 1);
-  wbRels = wbRels.replace('</Relationships>',
-    `<Relationship Id="${newRid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/></Relationships>`);
+  wbRels = wbRels.replace('</Relationships>', `<Relationship Id="${newRid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/></Relationships>`);
   zip.file('xl/_rels/workbook.xml.rels', wbRels);
-
   const sheetIds = [...wbXml.matchAll(/sheetId="(\d+)"/g)].map(m=>+m[1]);
-  const newSheetId = Math.max(0, ...sheetIds) + 1;
-  wbXml = wbXml.replace('</sheets>', `<sheet name="Bonnetjes" sheetId="${newSheetId}" r:id="${newRid}"/></sheets>`);
+  wbXml = wbXml.replace('</sheets>', `<sheet name="Bonnetjes" sheetId="${Math.max(0, ...sheetIds) + 1}" r:id="${newRid}"/></sheets>`);
   zip.file('xl/workbook.xml', wbXml);
-
   let ct = await zip.file('[Content_Types].xml').async('string');
   if (!ct.includes('worksheets/sheet2.xml'))
     ct = ct.replace('</Types>', `<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`);
@@ -1202,11 +1099,8 @@ function buildReceiptDrawingXml(photos) {
     `<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${anchors}</xdr:wsDr>`;
 }
 function buildReceiptDrawingRels(photos) {
-  const rels = photos.map((p, i) =>
-    `<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/bonnetje${p.n+1}.${p.ext}"/>`
-  ).join('');
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rels}</Relationships>`;
+  const rels = photos.map((p, i) => `<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/bonnetje${p.n+1}.${p.ext}"/>`).join('');
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rels}</Relationships>`;
 }
 
 async function doExport() {
@@ -1237,38 +1131,31 @@ async function buildExcelWithPhotos(data, filename) {
   const kmTotal = kmEntries.reduce((s,e) => s + e.km * KM_RATE, 0);
   const otherTotal = otherEntries.reduce((s,e) => s + e.amount, 0);
   const grandTotal = wwKmTotal + kmTotal + otherTotal;
-
-  const colWidths = [14, 18, 36, 12, 14, 14, 24];
   const sheetRows = [];
-
   sheetRows.push([`🏠 WOON-WERK KILOMETERS`]);
   sheetRows.push(['Datum','Type','Route','Kilometers','Tarief (€/km)','Bedrag (€)','Bonnetjes']);
   if (wwEntries.length === 0) sheetRows.push(['Geen woon-werk ritten in deze periode','','','','','','']);
   else wwEntries.forEach(e => sheetRows.push([formatDate(e.date),'Woon-werk','Woon-werk',e.km,KM_RATE,parseFloat((e.km*KM_RATE).toFixed(2)),(e.photos||[]).length>0?`${(e.photos||[]).length} foto('s) → zie Bonnetjes`:'-']));
   sheetRows.push(['','','', wwEntries.reduce((s,e)=>s+e.km,0), '', parseFloat(wwKmTotal.toFixed(2)), `Subtotaal woon-werk`]);
   sheetRows.push([]);
-
   sheetRows.push([`🚗 OVERIGE KILOMETERS`]);
   sheetRows.push(['Datum','Type','Route','Kilometers','Tarief (€/km)','Bedrag (€)','Bonnetjes']);
   if (kmEntries.length === 0) sheetRows.push(['Geen overige ritten in deze periode','','','','','','']);
   else kmEntries.forEach(e => sheetRows.push([formatDate(e.date),'Kilometers',e.route||'',e.km,KM_RATE,parseFloat((e.km*KM_RATE).toFixed(2)),(e.photos||[]).length>0?`${(e.photos||[]).length} foto('s) → zie Bonnetjes`:'-']));
   sheetRows.push(['','','', kmEntries.reduce((s,e)=>s+e.km,0), '', parseFloat(kmTotal.toFixed(2)), `Subtotaal overige km`]);
   sheetRows.push([]);
-
   sheetRows.push([`🧾 OVERIGE KOSTEN`]);
   sheetRows.push(['Datum','Type','Omschrijving','','','Bedrag (€)','Bonnetjes']);
   if (otherEntries.length === 0) sheetRows.push(['Geen overige kosten in deze periode','','','','','','']);
   else otherEntries.forEach(e => sheetRows.push([formatDate(e.date),e.declType||'Overig',e.desc||'','','',parseFloat(e.amount.toFixed(2)),(e.photos||[]).length>0?`${(e.photos||[]).length} foto('s) → zie Bonnetjes`:'-']));
   sheetRows.push(['','','','','', parseFloat(otherTotal.toFixed(2)), `Subtotaal overige kosten`]);
   sheetRows.push([]);
-
   sheetRows.push(['TOTAAL WOON-WERK KM', '', '', wwEntries.reduce((s,e)=>s+e.km,0), '', parseFloat(wwKmTotal.toFixed(2)), '']);
   sheetRows.push(['TOTAAL OVERIGE KM', '', '', kmEntries.reduce((s,e)=>s+e.km,0), '', parseFloat(kmTotal.toFixed(2)), '']);
   sheetRows.push(['TOTAAL OVERIGE KOSTEN', '', '', '', '', parseFloat(otherTotal.toFixed(2)), '']);
   sheetRows.push(['TOTAAL ALLES', '', '', '', '', parseFloat(grandTotal.toFixed(2)), '']);
-
   const ws1 = XLSX.utils.aoa_to_sheet(sheetRows);
-  ws1['!cols'] = colWidths.map(w=>({wch:w}));
+  ws1['!cols'] = [14,18,36,12,14,14,24].map(w=>({wch:w}));
 
   const allPhotos = [];
   let imgIdx = 0;
@@ -1277,11 +1164,9 @@ async function buildExcelWithPhotos(data, filename) {
     const label = `${formatDate(e.date)} – ${isKm ? (e.kmType==='ww'?'Woon-werk':e.route||'Kilometers') : (e.desc||e.declType||'Declaratie')}`;
     (e.photos||[]).forEach((p, pi) => {
       const ext = p.startsWith('data:image/png') ? 'png' : 'jpeg';
-      const b64 = p.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/,'');
-      allPhotos.push({ label, photoIndex: pi+1, base64: b64, ext, imgIdx: imgIdx++ });
+      allPhotos.push({ label, photoIndex: pi+1, base64: p.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/,''), ext, imgIdx: imgIdx++ });
     });
   });
-
   const PHOTO_ROWS = 30;
   const ws2Rows = [];
   allPhotos.forEach((p, i) => {
@@ -1305,31 +1190,23 @@ async function buildExcelWithPhotos(data, filename) {
   XLSX.utils.book_append_sheet(wb, ws1, 'Declaraties');
   XLSX.utils.book_append_sheet(wb, ws2, 'Bonnetjes');
   const xlsxBinary = XLSX.write(wb, {type:'binary', bookType:'xlsx'});
-
   const zip = await JSZip.loadAsync(binStrToUint8(xlsxBinary));
   if (allPhotos.length === 0) { triggerDownload(xlsxBinary, filename+'.xlsx', 'binary'); return; }
 
-  await Promise.all(allPhotos.map(async (p) => {
-    zip.file(`xl/media/image${p.imgIdx+1}.${p.ext}`, base64ToUint8(p.base64));
-  }));
-
-  zip.file('xl/drawings/drawing2.xml', buildDrawingXml(allPhotos, PHOTO_ROWS));
+  await Promise.all(allPhotos.map(async (p) => zip.file(`xl/media/image${p.imgIdx+1}.${p.ext}`, base64ToUint8(p.base64))));
+  zip.file('xl/drawings/drawing2.xml', buildDrawingXml(allPhotos));
   zip.file('xl/drawings/_rels/drawing2.xml.rels', buildDrawingRels(allPhotos));
   zip.file('xl/worksheets/_rels/sheet2.xml.rels',
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
     `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
     `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing2.xml"/></Relationships>`);
-
   const sheet2Path = 'xl/worksheets/sheet2.xml';
   let sheet2Xml = await zip.file(sheet2Path).async('string');
   if (!sheet2Xml.includes('<drawing')) {
     sheet2Xml = sheet2Xml.replace('</worksheet>', '<drawing r:id="rId1"/></worksheet>');
-    if (!sheet2Xml.includes('xmlns:r=')) {
-      sheet2Xml = sheet2Xml.replace('<worksheet ', '<worksheet xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ');
-    }
+    if (!sheet2Xml.includes('xmlns:r=')) sheet2Xml = sheet2Xml.replace('<worksheet ', '<worksheet xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ');
   }
   zip.file(sheet2Path, sheet2Xml);
-
   let contentTypes = await zip.file('[Content_Types].xml').async('string');
   if (!contentTypes.includes('drawing2.xml'))
     contentTypes = contentTypes.replace('</Types>', `<Override PartName="/xl/drawings/drawing2.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>`);
@@ -1350,38 +1227,20 @@ function buildDrawingXml(photos) {
   const IMG_W_EMU = 2700000, IMG_H_EMU = 4320000, GAP_EMU = 200000;
   const anchors = photos.map((p, i) => {
     const topEMU = i * (IMG_H_EMU + GAP_EMU + 400000);
-    return `
-      <xdr:absoluteAnchor>
-        <xdr:pos x="0" y="${topEMU}"/>
-        <xdr:ext cx="${IMG_W_EMU}" cy="${IMG_H_EMU}"/>
-        <xdr:pic>
-          <xdr:nvPicPr>
-            <xdr:cNvPr id="${i+2}" name="Bonnetje${i+1}" descr="${escXml(p.label)}"/>
-            <xdr:cNvPicPr><a:picLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></xdr:cNvPicPr>
-          </xdr:nvPicPr>
-          <xdr:blipFill>
-            <a:blip xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" r:embed="rId${i+1}"/>
-            <a:stretch xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:fillRect/></a:stretch>
-          </xdr:blipFill>
-          <xdr:spPr>
-            <a:xfrm xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:off x="0" y="0"/><a:ext cx="${IMG_W_EMU}" cy="${IMG_H_EMU}"/></a:xfrm>
-            <a:prstGeom xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" prst="rect"><a:avLst/></a:prstGeom>
-          </xdr:spPr>
-        </xdr:pic>
-        <xdr:clientData/>
-      </xdr:absoluteAnchor>`;
+    return `<xdr:absoluteAnchor><xdr:pos x="0" y="${topEMU}"/><xdr:ext cx="${IMG_W_EMU}" cy="${IMG_H_EMU}"/>` +
+      `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${i+2}" name="Bonnetje${i+1}" descr="${escXml(p.label)}"/>` +
+      `<xdr:cNvPicPr><a:picLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>` +
+      `<xdr:blipFill><a:blip xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" r:embed="rId${i+1}"/>` +
+      `<a:stretch xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:fillRect/></a:stretch></xdr:blipFill>` +
+      `<xdr:spPr><a:xfrm xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:off x="0" y="0"/><a:ext cx="${IMG_W_EMU}" cy="${IMG_H_EMU}"/></a:xfrm>` +
+      `<a:prstGeom xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic>` +
+      `<xdr:clientData/></xdr:absoluteAnchor>`;
   }).join('');
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${anchors}</xdr:wsDr>`;
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${anchors}</xdr:wsDr>`;
 }
 function buildDrawingRels(photos) {
-  const rels = photos.map((p, i) =>
-    `<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image${i+1}.${p.ext}"/>`
-  ).join('\n  ');
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  ${rels}
-</Relationships>`;
+  const rels = photos.map((p, i) => `<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image${i+1}.${p.ext}"/>`).join('');
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rels}</Relationships>`;
 }
 
 function escXml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -1389,9 +1248,8 @@ function binStrToUint8(bin) { const buf = new Uint8Array(bin.length); for (let i
 function base64ToUint8(b64) { const bin = atob(b64); const buf = new Uint8Array(bin.length); for (let i=0;i<bin.length;i++) buf[i]=bin.charCodeAt(i); return buf; }
 function triggerDownload(data, name, type) {
   let url;
-  if (type === 'binary') {
-    url = URL.createObjectURL(new Blob([binStrToUint8(data)], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
-  } else { url = URL.createObjectURL(data); }
+  if (type === 'binary') url = URL.createObjectURL(new Blob([binStrToUint8(data)], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  else url = URL.createObjectURL(data);
   const a = document.createElement('a');
   a.href=url; a.download=name; a.click();
   setTimeout(()=>URL.revokeObjectURL(url), 3000);
@@ -1411,11 +1269,7 @@ window.saveSettings = saveSettings;
 function formatEur(v) { return '€' + v.toFixed(2).replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g,'.'); }
 function formatDate(s) { return new Date(s).toLocaleDateString('nl-NL',{day:'2-digit',month:'short',year:'numeric'}); }
 function setLoading(on) { document.getElementById('loadingOverlay').style.display = on ? 'flex' : 'none'; }
-function toast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg; t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2200);
-}
+function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2200); }
 window.toast = toast;
 function openLightbox(src) { document.getElementById('lightboxImg').src = src; document.getElementById('lightbox').classList.add('open'); }
 window.openLightbox = openLightbox;
