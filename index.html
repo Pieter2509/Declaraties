@@ -789,7 +789,7 @@ function renderEntries(entries) {
   }).join('');
 }
 function getTypeEmoji(t) { return t ? t.split(' ')[0] : '🧾'; }
-function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escHtml(s) { return String(s||'').replace(/&/g,'&').replace(/</g,'<').replace(/>/g,'>'); }
 
 function openDelete(id) { deleteId = id; document.getElementById('deleteModal').classList.add('open'); }
 window.openDelete = openDelete;
@@ -870,25 +870,35 @@ async function buildTravelExpenseReport(data) {
   })();
   let sheetXml = await zip.file(sheetPath).async('string');
 
-  // Schrijf cel maar behoud bestaande stijl (randen/notatie)
+  // Schrijf cel maar behoud bestaande stijl (randen/notatie) én garandeer dat de rij bestaat
   function setCellValue(xml, cellRef, value, type) {
+    const col = cellRef.match(/[A-Z]+/)[0];
+    const rowNum = cellRef.replace(/[A-Z]+/, '');
+
+    // Bestaande stijl (randen/notatie) bewaren
     let style = '';
     const existing = xml.match(new RegExp(`<c r="${cellRef}"([^>]*?)(?:/>|>)`));
     if (existing) { const sm = existing[1].match(/ s="\d+"/); if (sm) style = sm[0]; }
+
+    // Bestaande cel verwijderen
     xml = xml.replace(new RegExp(`<c r="${cellRef}"[^>]*?(?:/>|>[\\s\\S]*?</c>)`, 'g'), '');
-    const row = cellRef.replace(/[A-Z]+/, '');
-    const rowRegex = new RegExp(`(<row[^>]*r="${row}"[^>]*>)(.*?)(</row>)`, 's');
+
+    // Rij garanderen (maakt aan of zet self-closing open) — fix voor rijen > 21
+    xml = ensureOpenRow(xml, rowNum);
+
     let newCell;
     if (type === 'n')      newCell = `<c r="${cellRef}"${style} t="n"><v>${value}</v></c>`;
     else if (type === 'f') newCell = `<c r="${cellRef}"${style}><f>${escXml(String(value).replace(/^=/,''))}</f></c>`;
     else                   newCell = `<c r="${cellRef}"${style} t="inlineStr"><is><t>${escXml(String(value))}</t></is></c>`;
+
+    const rowRegex = new RegExp(`(<row[^>]*r="${rowNum}"[^>]*>)([\\s\\S]*?)(</row>)`);
     xml = xml.replace(rowRegex, (match, open, content, close) => {
-      const colOrder = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O'];
-      const newIdx = colOrder.indexOf(cellRef.match(/([A-Z]+)/)[1]);
+      const colOrder = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P'];
+      const newIdx = colOrder.indexOf(col);
       const cellsInRow = [...content.matchAll(/<c r="([A-Z]+)\d+"[^>]*>/g)];
       let inserted = false, newContent = content;
-      for (const m of cellsInRow) {
-        if (colOrder.indexOf(m[1]) > newIdx) { newContent = newContent.replace(m[0], newCell + m[0]); inserted = true; break; }
+      for (const mm of cellsInRow) {
+        if (colOrder.indexOf(mm[1]) > newIdx) { newContent = newContent.replace(mm[0], newCell + mm[0]); inserted = true; break; }
       }
       if (!inserted) newContent += newCell;
       return open + newContent + close;
@@ -928,18 +938,10 @@ async function buildTravelExpenseReport(data) {
     sheetXml = setCellValue(sheetXml, `O${r}`, `M${r}*N${r}`, 'f');
   }
 
-    // ── Subtotaal/totaal-bereiken oprekken tot lastRow ──
-  // Elke kolom-SUM die bij rij 12 (of 21) begint en ergens in de oude
-  // datazone (t/m 21+extra) eindigt, wordt opgerekt tot de echte laatste rij.
+  // ── Kolomsommen die bij rij 12 beginnen oprekken tot de echte laatste rij ──
   sheetXml = sheetXml.replace(/<f>([\s\S]*?)<\/f>/g, (s, f) => {
-    const fixed = f.replace(/SUM\(([A-Z]+)(\d+):\1\s*(\d+)\)/g, (mm, col, r1, r2) => {
-      const start = +r1, end = +r2;
-      // alleen verticale sommen binnen 1 kolom die in de datazone eindigen
-      if ((start === 12 || start === 21) && end >= 12 && end <= lastRow) {
-        return `SUM(${col}12:${col}${lastRow})`;
-      }
-      return mm;
-    });
+    const fixed = f.replace(/SUM\(([A-Z]+)12:\1\s*(\d+)\)/g,
+      (mm, col) => `SUM(${col}12:${col}${lastRow})`);
     return `<f>${fixed}</f>`;
   });
 
@@ -961,6 +963,31 @@ async function buildTravelExpenseReport(data) {
   setTimeout(() => URL.revokeObjectURL(url), 3000);
 }
 
+// Garandeert dat rij N bestaat als <row r="N">…</row>.
+// - self-closing <row r="N"/>  → wordt opengezet
+// - ontbrekende rij             → wordt op de juiste numerieke plek ingevoegd
+function ensureOpenRow(xml, rowNum) {
+  rowNum = +rowNum;
+  const selfClose = new RegExp(`<row([^>]*\\br="${rowNum}"[^>]*)/>`);
+  if (selfClose.test(xml)) return xml.replace(selfClose, `<row$1></row>`);
+  if (new RegExp(`<row[^>]*\\br="${rowNum}"[^>]*>`).test(xml)) return xml; // bestaat al, open
+
+  const sd = xml.match(/(<sheetData[^>]*>)([\s\S]*?)(<\/sheetData>)/);
+  if (!sd) return xml;
+  const rowRe = /<row[^>]*\br="(\d+)"[^>]*(?:\/>|>[\s\S]*?<\/row>)/g;
+  const rows = [];
+  let m;
+  while ((m = rowRe.exec(sd[2])) !== null) rows.push({ num: +m[1], xml: m[0] });
+
+  let newBody = '', inserted = false;
+  for (const r of rows) {
+    if (!inserted && r.num > rowNum) { newBody += `<row r="${rowNum}"></row>`; inserted = true; }
+    newBody += r.xml;
+  }
+  if (!inserted) newBody += `<row r="${rowNum}"></row>`;
+  return xml.replace(sd[0], sd[1] + newBody + sd[3]);
+}
+
 // Schuift drawing1 (logo e.d.) `extra` rijen omlaag
 async function shiftSheet1Drawing(zip, extra) {
   const path = 'xl/drawings/drawing1.xml';
@@ -971,13 +998,27 @@ async function shiftSheet1Drawing(zip, extra) {
   zip.file(path, xml);
 }
 
-// Breidt datarijen 12–21 uit met `extra` rijen, opmaak behouden
+// Breidt datarijen 12–21 uit met `extra` rijen, opmaak + formules behouden
 function expandTemplateRows(xml, extra) {
   if (extra <= 0) return xml;
-  const CLONE_FROM = 20, LAST_DATA = 21;
+  const CLONE_FROM = 20, LAST_DATA = 21, LAST_DATA_BOUNDARY = 21;
+
+  // Schuift een rij `delta` omlaag: rij-attribuut, cel-refs én formule-tekst
   const shiftRefs = (rowXml, delta) => rowXml
+    // 1) rij-attribuut zelf
     .replace(/(<row r=")(\d+)(")/, (s,a,n,b) => a + (+n + delta) + b)
-    .replace(/(<c r="[A-Z]+)(\d+)(")/g, (s,a,n,b) => a + (+n + delta) + b);
+    // 2) cel-refs r="O22"
+    .replace(/(<c r="[A-Z]+)(\d+)(")/g, (s,a,n,b) => a + (+n + delta) + b)
+    // 3) formule-tekst binnen <f>…</f> meeschuiven (alleen totaalzone)
+    .replace(/<f>([\s\S]*?)<\/f>/g, (s, f) => {
+      const fixed = f.replace(/(\$?[A-Z]+\$?)(\d+)/g, (mm, col, n) => {
+        const num = +n;
+        if (num >= LAST_DATA_BOUNDARY) return col + (num + delta);
+        return mm;
+      });
+      return `<f>${fixed}</f>`;
+    });
+
   const sd = xml.match(/(<sheetData[^>]*>)([\s\S]*?)(<\/sheetData>)/);
   const rowRe = /<row r="(\d+)"[^>]*\/>|<row r="(\d+)"[^>]*>[\s\S]*?<\/row>/g;
   const rows = [];
@@ -1251,7 +1292,7 @@ function buildDrawingRels(photos) {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rels}</Relationships>`;
 }
 
-function escXml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escXml(s) { return String(s||'').replace(/&/g,'&').replace(/</g,'<').replace(/>/g,'>').replace(/"/g,'"'); }
 function binStrToUint8(bin) { const buf = new Uint8Array(bin.length); for (let i=0;i<bin.length;i++) buf[i]=bin.charCodeAt(i)&0xFF; return buf; }
 function base64ToUint8(b64) { const bin = atob(b64); const buf = new Uint8Array(bin.length); for (let i=0;i<bin.length;i++) buf[i]=bin.charCodeAt(i); return buf; }
 function triggerDownload(data, name, type) {
