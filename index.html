@@ -928,12 +928,20 @@ async function buildTravelExpenseReport(data) {
     sheetXml = setCellValue(sheetXml, `O${r}`, `M${r}*N${r}`, 'f');
   }
 
-  // Subtotaal/totaal-bereiken uitbreiden tot lastRow
-  sheetXml = sheetXml.replace(/<f>([\s\S]*?)<\/f>/g, (s, f) =>
-    `<f>${f
-      .replace(/SUM\(([A-Z]+)12:\1\s*21\)/g, (mm, c) => `SUM(${c}12:${c}${lastRow})`)
-      .replace(/SUM\(([A-Z]+)21:\1\s*21\)/g, (mm, c) => `SUM(${c}12:${c}${lastRow})`)
-    }</f>`);
+    // ── Subtotaal/totaal-bereiken oprekken tot lastRow ──
+  // Elke kolom-SUM die bij rij 12 (of 21) begint en ergens in de oude
+  // datazone (t/m 21+extra) eindigt, wordt opgerekt tot de echte laatste rij.
+  sheetXml = sheetXml.replace(/<f>([\s\S]*?)<\/f>/g, (s, f) => {
+    const fixed = f.replace(/SUM\(([A-Z]+)(\d+):\1\s*(\d+)\)/g, (mm, col, r1, r2) => {
+      const start = +r1, end = +r2;
+      // alleen verticale sommen binnen 1 kolom die in de datazone eindigen
+      if ((start === 12 || start === 21) && end >= 12 && end <= lastRow) {
+        return `SUM(${col}12:${col}${lastRow})`;
+      }
+      return mm;
+    });
+    return `<f>${fixed}</f>`;
+  });
 
   if (extra > 0) await shiftSheet1Drawing(zip, extra);
   zip.file(sheetPath, sheetXml);
