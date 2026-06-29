@@ -1172,7 +1172,7 @@ function buildTravelRowsGrouped(wwEntries, kmEntries, otherEntries) {
   return rows.slice(0, 10);
 }
 
-
+async function doExport() {
   let data = [...allEntries];
   let filename = 'declaraties';
   if (exportScope === 'current') {
