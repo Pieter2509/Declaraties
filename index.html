@@ -263,6 +263,7 @@ textarea { resize: vertical; min-height: 58px; }
   </div>
   <div class="header-right">
     <button class="btn btn-secondary btn-sm" onclick="openExportModal()">⬇ <span>Export</span></button>
+    <button class="btn btn-secondary btn-sm" onclick="generateTravelExpense()" title="Genereer Travel Expense Report" style="color:var(--success);border-color:var(--success)">✈️ <span>Travel Report</span></button>
     <button class="btn btn-secondary btn-sm btn-icon" onclick="openSettings()" title="Instellingen">⚙️</button>
     <img id="userAvatar" style="width:30px;height:30px;border-radius:50%;object-fit:cover;border:2px solid var(--border);cursor:pointer;display:none;" onclick="logout()" title="Uitloggen">
   </div>
@@ -910,7 +911,268 @@ function selectExport(scope) {
 }
 window.selectExport = selectExport;
 
-async function doExport() {
+// ── TRAVEL EXPENSE REPORT (GPBI-HR-F009) ─────────────────────────
+
+// Categorie-mapping: declaratie type → Excel kolom
+// H=Accommodation, I=Meal, J=Transportation, K=Entertainment, L=Others
+function getTravelCol(entry) {
+  if (entry.type === 'km') return 'J'; // Transportation
+  const t = (entry.declType || '').toLowerCase();
+  if (t.includes('lunch') || t.includes('diner') || t.includes('koffie') || t.includes('drank')) return 'I'; // Meal
+  if (t.includes('overnacht') || t.includes('hotel')) return 'H'; // Accommodation
+  if (t.includes('ov') || t.includes('trein') || t.includes('parkeer') || t.includes('vlieg') || t.includes('taxi')) return 'J'; // Transportation
+  if (t.includes('relatie') || t.includes('entertainment')) return 'K'; // Entertainment
+  return 'L'; // Others
+}
+
+function formatDateEN(dateStr) {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function getDescriptionEN(entry) {
+  if (entry.type === 'km') {
+    if (entry.kmType === 'ww') return 'Home ↔ Office (commute)';
+    return entry.route || 'Kilometers';
+  }
+  // Vertaal type naar Engels
+  const typeMap = {
+    '🍽 Lunch / Diner': 'Lunch / Dinner',
+    '☕ Koffie / Dranken': 'Coffee / Drinks',
+    '🚂 OV / Trein': 'Public Transport / Train',
+    '🅿 Parkeren': 'Parking',
+    '🏨 Overnachting': 'Accommodation',
+    '✈️ Vliegticket': 'Flight ticket',
+    '📦 Kantoormateriaal': 'Office supplies',
+    '💻 Software / Abonnement': 'Software / Subscription',
+    '📱 Telefoon': 'Phone',
+    '🎓 Training / Cursus': 'Training / Course',
+    '🎁 Relatiegeschenk': 'Business gift',
+    '🔧 Overig': 'Other',
+  };
+  const typeEN = typeMap[entry.declType] || entry.declType || 'Other';
+  return entry.desc ? `${typeEN} – ${entry.desc}` : typeEN;
+}
+
+async function generateTravelExpense() {
+  const data = getMonthEntries();
+  if (data.length === 0) {
+    toast('Geen declaraties voor deze maand');
+    return;
+  }
+
+  toast('⏳ Travel Expense Report wordt aangemaakt...');
+  setLoading(true);
+
+  try {
+    // Laad template als ArrayBuffer via fetch van de ingebedde base64
+    // We bouwen het xlsx zelf op met openpyxl-stijl via SheetJS
+    await buildTravelExpenseReport(data);
+    toast('✓ Travel Expense Report gedownload');
+  } catch(e) {
+    console.error(e);
+    toast('❌ Genereren mislukt: ' + e.message);
+  }
+  setLoading(false);
+}
+window.generateTravelExpense = generateTravelExpense;
+
+async function buildTravelExpenseReport(data) {
+  // Sorteer op datum
+  data = [...data].sort((a,b) => new Date(a.date) - new Date(b.date));
+
+  // Max 10 rijen in het template (rijen 12–21)
+  // Als meer dan 10 entries: groepeer per type
+  let rows = buildTravelRows(data);
+
+  // Maandnaam in Engels
+  const monthNamesEN = ['January','February','March','April','May','June',
+                        'July','August','September','October','November','December'];
+  const monthEN = monthNamesEN[currentMonth];
+  const firstDay = new Date(currentYear, currentMonth, 1);
+  const lastDay  = new Date(currentYear, currentMonth + 1, 0);
+
+  // Bouw xlsx workbook met SheetJS
+  const wb = XLSX.utils.book_new();
+
+  // We maken de sheet handmatig met aoa (array of arrays), 29 rijen × 15 kolommen (A–O)
+  // Gebaseerd op exacte structuur van het template
+  const COL = 15; // A t/m O
+  const ROW = 29;
+  const grid = Array.from({length: ROW}, () => Array(COL).fill(null));
+
+  // ── Header ──────────────────────────────────────────────────
+  grid[2][0]  = 'Business  Travel  Expenses Summary';
+  grid[4][0]  = '      Employee Name :';
+  grid[4][2]  = 'Pieter Hollanders';
+  grid[4][5]  = '           Employee No :';
+  grid[4][7]  = '026';
+  grid[4][9]  = '             Company / Department :';
+  grid[4][12] = 'GPBE';
+
+  grid[6][0]  = '      Duration :';
+  grid[6][2]  = firstDay;   // C7
+  grid[6][3]  = 'to';
+  grid[6][4]  = lastDay;    // E7
+  grid[6][5]  = '           Destination :';
+  grid[6][9]  = '             Cost Centre :';
+  grid[6][11] = 'MAR6';
+
+  // ── Kolom headers ────────────────────────────────────────────
+  grid[8][5]  = 'Ledger\n(To be completed by Finance)';
+  grid[8][6]  = 'Actual Expenses (in local currency)';
+  grid[9][7]  = 'Acco-';   grid[9][9]  = 'Trans-'; grid[9][10] = 'Enter-';
+  grid[9][12] = 'Total';   grid[9][13] = 'Exchange'; grid[9][14] = 'Total';
+  grid[10][0] = 'Date';    grid[10][1] = 'Description';
+  grid[10][6] = 'Currency';grid[10][7] = 'modation'; grid[10][8]  = 'Meal';
+  grid[10][9] = 'portation';grid[10][10]= 'tainment'; grid[10][11] = 'Others';
+  grid[10][12]= '(in local currency)'; grid[10][13]= 'Rate'; grid[10][14]= '(EUR)';
+
+  // ── Data rijen (12–21 = index 11–20) ─────────────────────────
+  const DATA_START = 11; // 0-indexed = rij 12 in Excel
+  const DATA_ROWS  = 10;
+
+  for (let i = 0; i < DATA_ROWS; i++) {
+    const r = DATA_START + i;
+    const excelRow = r + 1; // 1-indexed voor formules
+    if (i < rows.length) {
+      const row = rows[i];
+      grid[r][0]  = row.date;    // A: datum
+      grid[r][1]  = row.desc;    // B: omschrijving
+      grid[r][6]  = row.currency;// G: currency
+      grid[r][7]  = row.H || null; // H: accommodation
+      grid[r][8]  = row.I || null; // I: meal
+      grid[r][9]  = row.J || null; // J: transportation
+      grid[r][10] = row.K || null; // K: entertainment
+      grid[r][11] = row.L || null; // L: others
+    }
+    grid[r][12] = `=SUM(H${excelRow}:L${excelRow})`; // M: totaal local
+    grid[r][13] = 1;                                   // N: exchange rate
+    grid[r][14] = `=M${excelRow}*N${excelRow}`;       // O: totaal EUR
+  }
+
+  // ── Subtotaal rij (22 = index 21) ────────────────────────────
+  grid[21][6]  = 'Sub-total :';
+  grid[21][7]  = '=SUM(H12:H21)';
+  grid[21][8]  = '=SUM(I12:I21)';
+  grid[21][9]  = '=SUM(J12:J21)';
+  grid[21][10] = '=SUM(K12:K21)';
+  grid[21][11] = '=SUM(L12:L21)';
+  grid[21][12] = '=SUM(M12:M21)';
+  grid[21][14] = '=SUM(O12:O21)';
+
+  // ── Overige rijen ─────────────────────────────────────────────
+  grid[22][11] = 'Others :';
+  grid[22][14] = 0;
+  grid[23][0]  = 'Claimed by:';   grid[23][2] = 'Approved by:';
+  grid[23][4]  = 'Approved by:';  grid[23][5] = 'Processed by: (Finance Dept)';
+  grid[23][11] = 'Total Expenditure :'; grid[23][14] = '=SUM(O22:O23)';
+  grid[25][11] = 'Cash / Check Refund'; grid[25][14] = 0;
+  grid[27][0]  = 'Name: Pieter Hollanders'; grid[27][2] = 'Name: Jan Vis';
+  grid[27][4]  = 'Name:'; grid[27][5] = 'Name:';
+  grid[27][11] = 'Advance Amount :'; grid[27][14] = 0;
+  grid[28][0]  = 'Date: '; grid[28][2] = 'Date: ';
+  grid[28][4]  = 'Date:';  grid[28][5] = 'Date:';
+  grid[28][11] = 'Amount to be Paid :'; grid[28][14] = '=O24+O26-O28';
+
+  const ws = XLSX.utils.aoa_to_sheet(grid);
+
+  // Kolombreedtes exact als template
+  ws['!cols'] = [
+    {wch:12},{wch:32},{wch:14},{wch:4},{wch:10},{wch:18},
+    {wch:8},{wch:12},{wch:10},{wch:12},{wch:10},{wch:10},
+    {wch:16},{wch:8},{wch:10}
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, 'GPBI-HR-F009-Overseas Travel');
+
+  const filename = `Business_Travel_Expenses_Summary_-_${monthEN}_${currentYear}.xlsx`;
+  XLSX.writeFile(wb, filename);
+}
+
+function buildTravelRows(data) {
+  // Groepeer slim: woon-werk samen, overige km individueel, kosten per type/datum
+  const rows = [];
+
+  // 1. Woon-werk ritten → samengevat als één rij per periode of individueel
+  const wwEntries = data.filter(e => e.type === 'km' && e.kmType === 'ww');
+  const kmEntries = data.filter(e => e.type === 'km' && e.kmType !== 'ww');
+  const otherEntries = data.filter(e => e.type === 'other');
+
+  // Woon-werk: groepeer als er meer dan 3 zijn (anders individueel)
+  if (wwEntries.length > 3) {
+    const totalKm  = wwEntries.reduce((s,e) => s+e.km, 0);
+    const totalAmt = parseFloat((totalKm * KM_RATE).toFixed(2));
+    const dates    = wwEntries.map(e => new Date(e.date));
+    const minD     = new Date(Math.min(...dates));
+    const maxD     = new Date(Math.max(...dates));
+    const dateStr  = minD.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) +
+                     ' – ' + maxD.toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
+    rows.push({ date: dateStr, desc: `Home ↔ Office commute (${wwEntries.length}× ${wwEntries[0].km} km)`, currency:'EUR', J: totalAmt });
+  } else {
+    wwEntries.forEach(e => {
+      rows.push({ date: formatDateEN(e.date), desc: 'Home ↔ Office (commute)', currency:'EUR', J: parseFloat((e.km*KM_RATE).toFixed(2)) });
+    });
+  }
+
+  // Overige km: altijd individueel
+  kmEntries.forEach(e => {
+    rows.push({ date: formatDateEN(e.date), desc: e.route || 'Kilometers', currency:'EUR', J: parseFloat((e.km*KM_RATE).toFixed(2)) });
+  });
+
+  // Overige kosten: individueel
+  otherEntries.forEach(e => {
+    const col = getTravelCol(e);
+    const r = { date: formatDateEN(e.date), desc: getDescriptionEN(e), currency:'EUR' };
+    r[col] = parseFloat(e.amount.toFixed(2));
+    rows.push(r);
+  });
+
+  // Max 10 rijen — als meer, groepeer overige kosten per type
+  if (rows.length > 10) {
+    toast('⚠️ Meer dan 10 items — kosten worden per type gegroepeerd');
+    return buildTravelRowsGrouped(wwEntries, kmEntries, otherEntries);
+  }
+
+  return rows.slice(0, 10);
+}
+
+function buildTravelRowsGrouped(wwEntries, kmEntries, otherEntries) {
+  const rows = [];
+
+  // Woon-werk: 1 rij
+  if (wwEntries.length > 0) {
+    const totalAmt = parseFloat((wwEntries.reduce((s,e)=>s+e.km,0)*KM_RATE).toFixed(2));
+    const dates = wwEntries.map(e=>new Date(e.date));
+    const minD  = new Date(Math.min(...dates)), maxD = new Date(Math.max(...dates));
+    rows.push({ date: minD.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})+' – '+maxD.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}),
+      desc: `Home ↔ Office commute (${wwEntries.length}× ${wwEntries[0]?.km} km)`, currency:'EUR', J: totalAmt });
+  }
+
+  // Overige km: groepeer als meer dan 4
+  if (kmEntries.length > 4) {
+    const totalAmt = parseFloat((kmEntries.reduce((s,e)=>s+e.km,0)*KM_RATE).toFixed(2));
+    rows.push({ date: 'Various', desc: `Business travel – kilometers (${kmEntries.length} trips)`, currency:'EUR', J: totalAmt });
+  } else {
+    kmEntries.forEach(e => rows.push({ date: formatDateEN(e.date), desc: e.route||'Kilometers', currency:'EUR', J: parseFloat((e.km*KM_RATE).toFixed(2)) }));
+  }
+
+  // Overige kosten: groepeer per kolom (H/I/J/K/L)
+  const colTotals = {H:0, I:0, J:0, K:0, L:0};
+  const colNames  = {H:'Accommodation', I:'Meals & Drinks', J:'Transportation', K:'Entertainment', L:'Other expenses'};
+  otherEntries.forEach(e => { colTotals[getTravelCol(e)] += e.amount; });
+  Object.entries(colTotals).forEach(([col, total]) => {
+    if (total > 0) {
+      const r = { date: 'Various', desc: colNames[col], currency:'EUR' };
+      r[col] = parseFloat(total.toFixed(2));
+      rows.push(r);
+    }
+  });
+
+  return rows.slice(0, 10);
+}
+
+
   let data = [...allEntries];
   let filename = 'declaraties';
   if (exportScope === 'current') {
