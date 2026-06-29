@@ -75,29 +75,6 @@ header h1 { font-size: 15px; font-weight: 700; letter-spacing: -.3px; }
 .sc-km .val { color: var(--km); }
 .sc-other .val { color: var(--accent); }
 
-/* ── CALENDAR ── */
-.cal-card { background: white; border: 1px solid var(--border); border-radius: var(--r); padding: 14px 16px; margin-bottom: 16px; box-shadow: var(--shadow); }
-.cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 11px; flex-wrap: wrap; gap: 8px; }
-.cal-title { font-size: 13px; font-weight: 700; }
-.cal-legend { display: flex; gap: 12px; }
-.cal-leg { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); font-weight: 600; }
-.cal-leg .cal-key { width: 9px; height: 9px; border-radius: 50%; }
-.cal-leg .cal-key.done { background: var(--success); }
-.cal-leg .cal-key.none { background: var(--border); }
-.cal-weekdays { display: grid; grid-template-columns: repeat(7,1fr); gap: 5px; margin-bottom: 5px; }
-.cal-weekdays div { text-align: center; font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
-.cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 5px; }
-.cal-cell { aspect-ratio: 1 / 1; border-radius: var(--r-sm); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; background: var(--bg); border: 1.5px solid transparent; cursor: pointer; transition: all .15s; position: relative; }
-.cal-cell.empty { background: transparent; cursor: default; }
-.cal-cell.has { background: #ECFDF5; border-color: #A7F3D0; color: var(--success); font-weight: 800; }
-.cal-cell.has:hover { border-color: var(--success); }
-.cal-cell.no:hover { border-color: var(--accent); background: var(--accent-light); }
-.cal-cell.weekend:not(.has) { color: var(--muted); }
-.cal-cell.today { box-shadow: 0 0 0 2px var(--accent); }
-.cal-cell .cal-count { position: absolute; top: 3px; right: 5px; font-size: 9px; font-weight: 800; color: var(--success); }
-.cal-cell .cal-num { line-height: 1; }
-.cal-cell .cal-mark { font-size: 8px; line-height: 1; margin-top: 3px; height: 8px; color: var(--success); }
-
 /* ── FORM CARD ── */
 .form-card { background: white; border: 1px solid var(--border); border-radius: var(--r); padding: 18px; margin-bottom: 16px; box-shadow: var(--shadow); }
 .form-card-title { font-size: 13px; font-weight: 700; margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
@@ -317,21 +294,6 @@ textarea { resize: vertical; min-height: 58px; }
       <div class="lbl">💰 Totaal</div>
       <div class="val" id="sumTotal">€0,00</div>
     </div>
-  </div>
-
-  <!-- CALENDAR -->
-  <div class="cal-card">
-    <div class="cal-head">
-      <div class="cal-title">📅 Maandoverzicht</div>
-      <div class="cal-legend">
-        <span class="cal-leg"><span class="cal-key done"></span>Declaratie</span>
-        <span class="cal-leg"><span class="cal-key none"></span>Geen</span>
-      </div>
-    </div>
-    <div class="cal-weekdays">
-      <div>ma</div><div>di</div><div>wo</div><div>do</div><div>vr</div><div>za</div><div>zo</div>
-    </div>
-    <div class="cal-grid" id="calGrid"></div>
   </div>
 
   <!-- ADD FORM -->
@@ -680,7 +642,6 @@ function updateMonthUI() {
   document.getElementById('entriesTitle').textContent    = `Declaraties ${MONTHS[currentMonth]} ${currentYear}`;
   const n = entries.length;
   document.getElementById('entryCount').textContent = `${n} item${n !== 1 ? 's' : ''}`;
-  renderCalendar(entries);
   renderEntries(entries);
 }
 
@@ -780,82 +741,22 @@ window.onKmChange = onKmChange;
 
 // ── PHOTOS ────────────────────────────────────────────────────────
 
-// Verkleint en comprimeert een foto in de browser zodat hij ruim onder de
-// Firestore-limiet van 1 MB per document blijft. Telefoonfoto's zijn anders
-// vaak 3 tot 8 MB en kunnen dan niet opgeslagen worden.
-function compressImage(file, opts = {}) {
-  const maxDim      = opts.maxDim      || 1280;       // max breedte/hoogte in px
-  const targetBytes = opts.targetBytes || 300 * 1024; // streefgrootte data-URL
-  return new Promise((resolve, reject) => {
-    // Niet-afbeeldingen (zou niet moeten, maar voor de zekerheid) ongemoeid laten
-    if (!file.type.startsWith('image/')) { reject(new Error('Geen afbeelding')); return; }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        try {
-          let w = img.naturalWidth  || img.width;
-          let h = img.naturalHeight || img.height;
-          if (w > maxDim || h > maxDim) {
-            if (w >= h) { h = Math.round(h * maxDim / w); w = maxDim; }
-            else        { w = Math.round(w * maxDim / h); h = maxDim; }
-          }
-          const draw = (cw, ch) => {
-            const canvas = document.createElement('canvas');
-            canvas.width = cw; canvas.height = ch;
-            const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#FFFFFF';            // witte achtergrond i.p.v. transparant
-            ctx.fillRect(0, 0, cw, ch);
-            ctx.drawImage(img, 0, 0, cw, ch);
-            return canvas;
-          };
-          let canvas  = draw(w, h);
-          let quality = 0.7;
-          let dataUrl = canvas.toDataURL('image/jpeg', quality);
-          // Stap 1: kwaliteit verlagen tot we onder de streefgrootte zitten
-          while (dataUrl.length > targetBytes && quality > 0.4) {
-            quality -= 0.1;
-            dataUrl = canvas.toDataURL('image/jpeg', quality);
-          }
-          // Stap 2: nog te groot? Afmetingen verkleinen tot het past
-          let guard = 0;
-          while (dataUrl.length > targetBytes && (w > 640 || h > 640) && guard < 6) {
-            w = Math.round(w * 0.8); h = Math.round(h * 0.8);
-            canvas  = draw(w, h);
-            dataUrl = canvas.toDataURL('image/jpeg', 0.6);
-            guard++;
-          }
-          resolve(dataUrl);
-        } catch (err) { reject(err); }
-      };
-      img.onerror = () => reject(new Error('Afbeelding kon niet geladen worden'));
-      img.src = reader.result;
-    };
-    reader.onerror = () => reject(new Error('Bestand kon niet gelezen worden'));
-    reader.readAsDataURL(file);
-  });
-}
-
-async function handlePhotos(event, form) {
+function handlePhotos(event, form) {
   const files = Array.from(event.target.files);
-  event.target.value = '';
-  if (!files.length) return;
   const arr     = form === 'km' ? pendingKm   : pendingOther;
   const preview = document.getElementById(form === 'km' ? 'kmPhotoPreview' : 'otherPhotoPreview');
-  toast('⏳ Foto verwerken...');
-  for (const file of files) {
-    try {
-      const dataUrl = await compressImage(file, { maxDim: 1280, targetBytes: 300 * 1024 });
-      const idx = arr.push(dataUrl) - 1;
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const idx = arr.push(e.target.result) - 1;
       const wrap = document.createElement('div');
       wrap.className = 'photo-thumb-wrap';
-      wrap.innerHTML = `<img class="photo-thumb" src="${dataUrl}" onclick="openLightbox('${dataUrl}')"><button class="photo-remove-btn" onclick="removePhoto(this,'${form}',${idx})" title="Verwijder">×</button>`;
+      wrap.innerHTML = `<img class="photo-thumb" src="${e.target.result}" onclick="openLightbox('${e.target.result}')"><button class="photo-remove-btn" onclick="removePhoto(this,'${form}',${idx})" title="Verwijder">×</button>`;
       preview.appendChild(wrap);
-    } catch (err) {
-      console.error('Fotoverwerking mislukt:', err);
-      toast('❌ Foto kon niet verwerkt worden');
-    }
-  }
+    };
+    reader.readAsDataURL(file);
+  });
+  event.target.value = '';
 }
 window.handlePhotos = handlePhotos;
 
@@ -867,13 +768,6 @@ function removePhoto(btn, form, idx) {
 window.removePhoto = removePhoto;
 
 // ── ADD ENTRY ─────────────────────────────────────────────────────
-
-// Veiligheidsmarge: Firestore staat ~1 MB per document toe. We houden 900 KB
-// aan voor de foto's samen, zodat er ruimte blijft voor de overige velden.
-function photosTooLarge(photos) {
-  const total = photos.reduce((s, p) => s + (p ? p.length : 0), 0);
-  return total > 900 * 1024;
-}
 
 async function addEntry() {
   if (!db || !currentUser) return;
@@ -888,7 +782,6 @@ async function addEntry() {
       if (!km || km<=0) { toast('Vul een geldig aantal km in'); btn.disabled = false; return; }
       const route  = wwActive ? 'Woon-werk' : getRouteString();
       const photos = pendingKm.filter(Boolean);
-      if (photosTooLarge(photos)) { toast('❌ Foto\'s samen te groot, verwijder er een'); btn.disabled = false; return; }
       await addDoc(collection(db, 'declaraties'), {
         type: 'km', kmType: wwActive ? 'ww' : 'km',
         date, km, route, photos,
@@ -904,7 +797,6 @@ async function addEntry() {
       if (!type)              { toast('Selecteer een type'); btn.disabled = false; return; }
       if (!amount || amount<=0){ toast('Vul een geldig bedrag in'); btn.disabled = false; return; }
       const photos = pendingOther.filter(Boolean);
-      if (photosTooLarge(photos)) { toast('❌ Foto\'s samen te groot, verwijder er een'); btn.disabled = false; return; }
       await addDoc(collection(db, 'declaraties'), {
         type: 'other', declType: type, desc, date, amount, photos,
         uid: currentUser.uid,
@@ -939,59 +831,6 @@ function resetForm() {
   initStops();
 }
 window.resetForm = resetForm;
-
-// ── CALENDAR ──────────────────────────────────────────────────────
-
-function renderCalendar(entries) {
-  const grid = document.getElementById('calGrid');
-  if (!grid) return;
-
-  // Aantal declaraties per dag van de huidige maand
-  const counts = {};
-  entries.forEach(e => {
-    const d = new Date(e.date);
-    if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
-      const day = d.getDate();
-      counts[day] = (counts[day] || 0) + 1;
-    }
-  });
-
-  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-  // getDay(): 0=zo..6=za. Omzetten naar maandag-start: 0=ma..6=zo
-  let firstDow = (new Date(currentYear, currentMonth, 1).getDay() + 6) % 7;
-
-  const today = new Date();
-  const isThisMonth = today.getFullYear() === currentYear && today.getMonth() === currentMonth;
-
-  let html = '';
-  for (let i = 0; i < firstDow; i++) html += `<div class="cal-cell empty"></div>`;
-
-  for (let day = 1; day <= daysInMonth; day++) {
-    const dow     = (firstDow + day - 1) % 7;      // 5 = za, 6 = zo
-    const weekend = dow === 5 || dow === 6;
-    const n       = counts[day] || 0;
-    const has     = n > 0;
-    const isToday = isThisMonth && today.getDate() === day;
-    const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-    const cls = ['cal-cell', has ? 'has' : 'no', weekend ? 'weekend' : '', isToday ? 'today' : ''].filter(Boolean).join(' ');
-    const title = has ? `${n} declaratie${n > 1 ? 's' : ''}` : 'Geen declaratie';
-    html += `<div class="${cls}" onclick="pickCalDay('${dateStr}')" title="${title}">
-      ${n > 1 ? `<span class="cal-count">${n}</span>` : ''}
-      <span class="cal-num">${day}</span>
-      <span class="cal-mark">${has ? '●' : ''}</span>
-    </div>`;
-  }
-  grid.innerHTML = html;
-}
-
-// Klik op een dag: zet de datum klaar in het formulier en scroll ernaartoe
-function pickCalDay(dateStr) {
-  const km = document.getElementById('kmDate');    if (km) km.value = dateStr;
-  const ot = document.getElementById('otherDate'); if (ot) ot.value = dateStr;
-  const card = document.querySelector('.form-card');
-  if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-window.pickCalDay = pickCalDay;
 
 // ── RENDER ENTRIES ────────────────────────────────────────────────
 
@@ -1104,72 +943,95 @@ window.doExport = doExport;
 // Foto's worden als PNG ingebed in de xlsx zip via drawing XML (native Excel images)
 
 async function buildExcelWithPhotos(data, filename) {
-  // ── 1. Bouw declaratiesheet met twee aparte tabellen ───────────
-  const kmEntries    = data.filter(e => e.type === 'km');
+  // ── Splits data in categorieën ────────────────────────────────
+  const wwEntries    = data.filter(e => e.type === 'km' && e.kmType === 'ww');
+  const kmEntries    = data.filter(e => e.type === 'km' && e.kmType !== 'ww');
   const otherEntries = data.filter(e => e.type === 'other');
-  const kmTotal    = kmEntries.reduce((s,e) => s + e.km * KM_RATE, 0);
-  const otherTotal = otherEntries.reduce((s,e) => s + e.amount, 0);
 
-  const colWidths = [14, 20, 40, 12, 14, 14, 26];
-  const photoNote = e => (e.photos||[]).length > 0 ? `${(e.photos||[]).length} foto('s) → zie Bonnetjes` : '-';
+  const wwKmTotal    = wwEntries.reduce((s,e) => s + e.km * KM_RATE, 0);
+  const kmTotal      = kmEntries.reduce((s,e) => s + e.km * KM_RATE, 0);
+  const otherTotal   = otherEntries.reduce((s,e) => s + e.amount, 0);
+  const grandTotal   = wwKmTotal + kmTotal + otherTotal;
 
+  const colWidths = [14, 18, 36, 12, 14, 14, 24];
   const sheetRows = [];
-  const merges = [];
 
-  // ── Tabel 1: Kilometers ──
-  merges.push({ s:{r:sheetRows.length,c:0}, e:{r:sheetRows.length,c:6} });
-  sheetRows.push(['🚗 KILOMETERDECLARATIES','','','','','','']);
+  // ── SECTIE 1: WOON-WERK KILOMETERS ───────────────────────────
+  sheetRows.push([`🏠 WOON-WERK KILOMETERS`]);
   sheetRows.push(['Datum','Type','Route','Kilometers','Tarief (€/km)','Bedrag (€)','Bonnetjes']);
-  kmEntries.forEach(e => {
-    sheetRows.push([
-      formatDate(e.date),
-      e.kmType==='ww' ? 'Woon-werk' : 'Kilometers',
-      e.route||'',
-      e.km,
-      KM_RATE,
-      parseFloat((e.km*KM_RATE).toFixed(2)),
-      photoNote(e),
-    ]);
-  });
-  if (kmEntries.length === 0) sheetRows.push(['Geen kilometerdeclaraties','','','','','','']);
-  sheetRows.push(['','','','','TOTAAL', parseFloat(kmTotal.toFixed(2)), '']);
+  if (wwEntries.length === 0) {
+    sheetRows.push(['Geen woon-werk ritten in deze periode','','','','','','']);
+  } else {
+    wwEntries.forEach(e => {
+      sheetRows.push([
+        formatDate(e.date), 'Woon-werk', 'Woon-werk',
+        e.km, KM_RATE, parseFloat((e.km * KM_RATE).toFixed(2)),
+        (e.photos||[]).length > 0 ? `${(e.photos||[]).length} foto('s) → zie Bonnetjes` : '-',
+      ]);
+    });
+  }
+  sheetRows.push(['','','',
+    wwEntries.reduce((s,e)=>s+e.km,0), '',
+    parseFloat(wwKmTotal.toFixed(2)),
+    `Subtotaal woon-werk`
+  ]);
+  sheetRows.push([]);
 
-  // ── Scheiding tussen de tabellen ──
-  sheetRows.push(['']);
-  sheetRows.push(['']);
+  // ── SECTIE 2: OVERIGE KILOMETERS ─────────────────────────────
+  sheetRows.push([`🚗 OVERIGE KILOMETERS`]);
+  sheetRows.push(['Datum','Type','Route','Kilometers','Tarief (€/km)','Bedrag (€)','Bonnetjes']);
+  if (kmEntries.length === 0) {
+    sheetRows.push(['Geen overige ritten in deze periode','','','','','','']);
+  } else {
+    kmEntries.forEach(e => {
+      sheetRows.push([
+        formatDate(e.date), 'Kilometers', e.route||'',
+        e.km, KM_RATE, parseFloat((e.km * KM_RATE).toFixed(2)),
+        (e.photos||[]).length > 0 ? `${(e.photos||[]).length} foto('s) → zie Bonnetjes` : '-',
+      ]);
+    });
+  }
+  sheetRows.push(['','','',
+    kmEntries.reduce((s,e)=>s+e.km,0), '',
+    parseFloat(kmTotal.toFixed(2)),
+    `Subtotaal overige km`
+  ]);
+  sheetRows.push([]);
 
-  // ── Tabel 2: Overige kosten ──
-  merges.push({ s:{r:sheetRows.length,c:0}, e:{r:sheetRows.length,c:6} });
-  sheetRows.push(['🧾 OVERIGE KOSTEN','','','','','','']);
+  // ── SECTIE 3: OVERIGE KOSTEN ──────────────────────────────────
+  sheetRows.push([`🧾 OVERIGE KOSTEN`]);
   sheetRows.push(['Datum','Type','Omschrijving','','','Bedrag (€)','Bonnetjes']);
-  otherEntries.forEach(e => {
-    sheetRows.push([
-      formatDate(e.date),
-      e.declType||'Overig',
-      e.desc||'',
-      '',
-      '',
-      parseFloat(e.amount.toFixed(2)),
-      photoNote(e),
-    ]);
-  });
-  if (otherEntries.length === 0) sheetRows.push(['Geen overige kosten','','','','','','']);
-  sheetRows.push(['','','','','TOTAAL', parseFloat(otherTotal.toFixed(2)), '']);
+  if (otherEntries.length === 0) {
+    sheetRows.push(['Geen overige kosten in deze periode','','','','','','']);
+  } else {
+    otherEntries.forEach(e => {
+      sheetRows.push([
+        formatDate(e.date), e.declType||'Overig', e.desc||'',
+        '', '', parseFloat(e.amount.toFixed(2)),
+        (e.photos||[]).length > 0 ? `${(e.photos||[]).length} foto('s) → zie Bonnetjes` : '-',
+      ]);
+    });
+  }
+  sheetRows.push(['','','','','',
+    parseFloat(otherTotal.toFixed(2)),
+    `Subtotaal overige kosten`
+  ]);
+  sheetRows.push([]);
 
-  // ── Eindtotaal ──
-  sheetRows.push(['']);
-  sheetRows.push(['','','','','TOTAAL ALLES', parseFloat((kmTotal+otherTotal).toFixed(2)), '']);
+  // ── TOTAALBLOK ────────────────────────────────────────────────
+  sheetRows.push(['TOTAAL WOON-WERK KM',   '', '', wwEntries.reduce((s,e)=>s+e.km,0), '', parseFloat(wwKmTotal.toFixed(2)),  '']);
+  sheetRows.push(['TOTAAL OVERIGE KM',     '', '', kmEntries.reduce((s,e)=>s+e.km,0), '', parseFloat(kmTotal.toFixed(2)),    '']);
+  sheetRows.push(['TOTAAL OVERIGE KOSTEN', '', '', '', '',                                 parseFloat(otherTotal.toFixed(2)), '']);
+  sheetRows.push(['TOTAAL ALLES',          '', '', '', '',                                 parseFloat(grandTotal.toFixed(2)), '']);
 
   const ws1 = XLSX.utils.aoa_to_sheet(sheetRows);
-  ws1['!cols']   = colWidths.map(w=>({wch:w}));
-  ws1['!merges'] = merges;
+  ws1['!cols'] = colWidths.map(w=>({wch:w}));
 
   // ── 2. Verzamel alle foto's met metadata ───────────────────────
   // Structuur: [{declLabel, photoIndex, base64, ext, imgIdx}]
   const allPhotos = [];
   let imgIdx = 0;
-  const orderedForPhotos = [...kmEntries, ...otherEntries];
-  orderedForPhotos.forEach(e => {
+  data.forEach((e,di) => {
     const isKm = e.type === 'km';
     const label = `${formatDate(e.date)} – ${isKm ? (e.kmType==='ww'?'Woon-werk':e.route||'Kilometers') : (e.desc||e.declType||'Declaratie')}`;
     (e.photos||[]).forEach((p, pi) => {
@@ -1182,7 +1044,7 @@ async function buildExcelWithPhotos(data, filename) {
   // ── 3. Bouw Bonnetjes sheet XML ────────────────────────────────
   // Elke foto krijgt 2 rijen: label-rij + grote fotocel (via drawing)
   // We plaatsen foto's in kolom A, 1 per blok van PHOTO_ROWS rijen
-  const PHOTO_ROWS = 16; // gereserveerde rijen per foto (moet hoog genoeg zijn voor PHOTO_H_PX)
+  const PHOTO_ROWS = 30; // hoogte per foto in rijen (~15cm)
   const ws2Rows = [];
   allPhotos.forEach((p, i) => {
     const startRow = i * (PHOTO_ROWS + 2); // +2 voor label + lege rij
@@ -1283,21 +1145,17 @@ async function buildExcelWithPhotos(data, filename) {
 }
 
 function buildDrawingXml(photos, photoRows) {
-  // Vaste fotogrootte in pixels, omgerekend naar EMU (1 px = 9525 EMU).
-  // Onafhankelijk van kolombreedtes, zodat de foto exact deze maat krijgt.
-  // Pas deze twee waarden aan om breedte/hoogte te wijzigen:
-  const PHOTO_W_PX = 360; // breedte van de foto
-  const PHOTO_H_PX = 280; // hoogte van de foto
-  const EMU   = 9525;
-  const W_EMU = PHOTO_W_PX * EMU;
-  const H_EMU = PHOTO_H_PX * EMU;
+  // EMU berekeningen: 1 rij ≈ 15 pixels ≈ 190500 EMU, 1 col ≈ 64 pixels ≈ 609600 EMU
+  const ROW_EMU   = 190500 * 1;   // per rij
+  const IMG_H_EMU = ROW_EMU * photoRows;
+  const IMG_W_EMU = 609600 * 10;  // ~10 kolommen breed
 
   const anchors = photos.map((p, i) => {
     const rowStart = i * (photoRows + 2) + 1; // +1 voor label rij (0-indexed)
     return `
-  <xdr:oneCellAnchor>
+  <xdr:twoCellAnchor editAs="oneCell">
     <xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${rowStart}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>
-    <xdr:ext cx="${W_EMU}" cy="${H_EMU}"/>
+    <xdr:to><xdr:col>8</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${rowStart + photoRows}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>
     <xdr:pic>
       <xdr:nvPicPr>
         <xdr:cNvPr id="${i+2}" name="Bonnetje${i+1}" descr="${escXml(p.label)}"/>
@@ -1308,12 +1166,12 @@ function buildDrawingXml(photos, photoRows) {
         <a:stretch xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:fillRect/></a:stretch>
       </xdr:blipFill>
       <xdr:spPr>
-        <a:xfrm xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:off x="0" y="0"/><a:ext cx="${W_EMU}" cy="${H_EMU}"/></a:xfrm>
+        <a:xfrm xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:off x="0" y="0"/><a:ext cx="${IMG_W_EMU}" cy="${IMG_H_EMU}"/></a:xfrm>
         <a:prstGeom xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" prst="rect"><a:avLst/></a:prstGeom>
       </xdr:spPr>
     </xdr:pic>
     <xdr:clientData/>
-  </xdr:oneCellAnchor>`;
+  </xdr:twoCellAnchor>`;
   }).join('');
 
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
