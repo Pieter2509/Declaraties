@@ -1145,17 +1145,19 @@ async function buildExcelWithPhotos(data, filename) {
 }
 
 function buildDrawingXml(photos, photoRows) {
-  // EMU berekeningen: 1 rij ≈ 15 pixels ≈ 190500 EMU, 1 col ≈ 64 pixels ≈ 609600 EMU
-  const ROW_EMU   = 190500 * 1;   // per rij
-  const IMG_H_EMU = ROW_EMU * photoRows;
-  const IMG_W_EMU = 609600 * 10;  // ~10 kolommen breed
+  // Vaste afmetingen in EMU (English Metric Units): 1cm = 360000 EMU
+  // Foto: max ~8cm breed × ~12cm hoog — past mooi op A4 naast tekst
+  const IMG_W_EMU = 2700000;  // 7.5cm breed
+  const IMG_H_EMU = 4320000;  // 12cm hoog
+  const GAP_EMU   = 200000;   // 0.5cm tussen foto's
 
   const anchors = photos.map((p, i) => {
-    const rowStart = i * (photoRows + 2) + 1; // +1 voor label rij (0-indexed)
+    // Absolute positionering: foto's onder elkaar, links uitgelijnd
+    const topEMU = i * (IMG_H_EMU + GAP_EMU + 400000); // +400000 voor label ruimte
     return `
-  <xdr:twoCellAnchor editAs="oneCell">
-    <xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${rowStart}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>
-    <xdr:to><xdr:col>8</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${rowStart + photoRows}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>
+  <xdr:absoluteAnchor>
+    <xdr:pos x="0" y="${topEMU}"/>
+    <xdr:ext cx="${IMG_W_EMU}" cy="${IMG_H_EMU}"/>
     <xdr:pic>
       <xdr:nvPicPr>
         <xdr:cNvPr id="${i+2}" name="Bonnetje${i+1}" descr="${escXml(p.label)}"/>
@@ -1171,7 +1173,7 @@ function buildDrawingXml(photos, photoRows) {
       </xdr:spPr>
     </xdr:pic>
     <xdr:clientData/>
-  </xdr:twoCellAnchor>`;
+  </xdr:absoluteAnchor>`;
   }).join('');
 
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
