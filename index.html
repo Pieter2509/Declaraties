@@ -1061,7 +1061,9 @@ async function buildTravelExpenseReport(data) {
     if (row.K) sheetXml = setCellValue(sheetXml, `K${r}`, row.K, 'n');
     if (row.L) sheetXml = setCellValue(sheetXml, `L${r}`, row.L, 'n');
     sheetXml = setCellValue(sheetXml, `M${r}`, `SUM(H${r}:L${r})`, 'f');
-    sheetXml = setCellValue(sheetXml, `N${r}`, 1, 'n');
+    const localTotal = (row.H||0)+(row.I||0)+(row.J||0)+(row.K||0)+(row.L||0);
+    const rate = (row.currency && row.currency !== 'EUR' && localTotal > 0) ? parseFloat((row.eur / localTotal).toFixed(6)) : 1;
+    sheetXml = setCellValue(sheetXml, `N${r}`, rate, 'n');
     sheetXml = setCellValue(sheetXml, `O${r}`, `M${r}*N${r}`, 'f');
   }
 
@@ -1200,8 +1202,8 @@ function buildTravelRows(data) {
   }
   kmEntries.forEach(e => rows.push({ date: fmtDateEN(e.date), desc: e.route || 'Kilometers', currency: 'EUR', J: parseFloat((e.km*KM_RATE).toFixed(2)) }));
   otherEntries.forEach(e => {
-    const r = { date: fmtDateEN(e.date), desc: getDescriptionEN(e), currency: e.currency || 'EUR' };
-    r[getTravelCol(e)] = parseFloat(getEurAmount(e).toFixed(2));
+    const r = { date: fmtDateEN(e.date), desc: getDescriptionEN(e), currency: e.currency || 'EUR', eur: parseFloat(getEurAmount(e).toFixed(2)) };
+    r[getTravelCol(e)] = parseFloat(e.amount.toFixed(2));
     rows.push(r);
   });
   return rows;
