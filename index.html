@@ -997,12 +997,14 @@ function getDescriptionEN(entry) {
 }
 
 async function generateTravelExpense() {
+  console.log('[TravelReport] start. currentMonth:', currentMonth, 'currentYear:', currentYear, 'allEntries.length:', allEntries.length);
   const data = getMonthEntries().filter(e => {
     const d = new Date(e.date);
     const inMonth = d.getFullYear() === currentYear && d.getMonth() === currentMonth;
-    if (!inMonth) console.warn('Entry buiten geselecteerde maand overgeslagen in Travel Report:', e.id, e.date);
+    if (!inMonth) console.warn('[TravelReport] Entry buiten geselecteerde maand overgeslagen:', e.id, e.date);
     return inMonth;
   });
+  console.log('[TravelReport] data na filter:', data.length, 'items:', data.map(e => ({id:e.id, date:e.date, desc:e.desc||e.route})));
   if (data.length === 0) { toast('Geen declaraties voor deze maand'); return; }
   toast('⏳ Travel Expense Report wordt aangemaakt...');
   setLoading(true);
