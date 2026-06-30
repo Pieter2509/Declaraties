@@ -843,8 +843,14 @@ async function addEntry() {
         photos: pendingOther.filter(Boolean), uid: currentUser.uid, createdAt: Date.now()
       });
     }
+    const savedDate = currentTab === 'km' ? document.getElementById('kmDate').value : document.getElementById('otherDate').value;
     resetForm();
-    toast('✓ Declaratie opgeslagen');
+    const sd = new Date(savedDate);
+    if (sd.getFullYear() !== currentYear || sd.getMonth() !== currentMonth) {
+      toast(`✓ Opgeslagen, maar let op: datum valt buiten ${MONTHS[currentMonth]} ${currentYear}`);
+    } else {
+      toast('✓ Declaratie opgeslagen');
+    }
   } catch(e) {
     console.error(e);
     toast('❌ ' + (e.code === 'permission-denied' ? 'Geen toegang — controleer Firestore-regels' : 'Opslaan mislukt: ' + e.message));
@@ -868,8 +874,8 @@ function resetForm() {
   document.getElementById('kmPhotoPreview').innerHTML = '';
   document.getElementById('otherPhotoPreview').innerHTML = '';
   const today = new Date().toISOString().slice(0,10);
-  document.getElementById('kmDate').value = today;
-  document.getElementById('otherDate').value = today;
+  if (!document.getElementById('kmDate').value) document.getElementById('kmDate').value = today;
+  if (!document.getElementById('otherDate').value) document.getElementById('otherDate').value = today;
   initStops();
 }
 window.resetForm = resetForm;
