@@ -406,10 +406,40 @@ textarea { resize: vertical; min-height: 58px; }
           <input type="text" id="otherDesc" placeholder="bijv. Lunch met klant XYZ">
         </div>
         <div class="fg">
-          <label>Bedrag (€)</label>
+          <label>Voluta</label>
+          <select id="otherCurrency" onchange="onCurrencyChange()">
+            <option value="EUR" selected>€ EUR</option>
+            <option value="USD">$ USD</option>
+            <option value="GBP">£ GBP</option>
+            <option value="CHF">CHF</option>
+            <option value="JPY">¥ JPY</option>
+            <option value="CNY">¥ CNY</option>
+            <option value="SEK">SEK</option>
+            <option value="NOK">NOK</option>
+            <option value="DKK">DKK</option>
+            <option value="PLN">PLN</option>
+            <option value="CZK">CZK</option>
+            <option value="HUF">HUF</option>
+            <option value="HKD">HKD</option>
+            <option value="SGD">SGD</option>
+            <option value="AUD">AUD</option>
+            <option value="CAD">CAD</option>
+            <option value="OTHER">Andere...</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label id="otherAmountLabel">Bedrag (€)</label>
           <input type="number" id="otherAmount" placeholder="0,00" min="0" step="0.01">
         </div>
-        <div class="fg full">
+        <div class="fg full" id="eurAmountRow" style="display:none">
+          <label>Bedrag in € (zoals afgeschreven door de bank)</label>
+          <input type="number" id="otherEurAmount" placeholder="0,00" min="0" step="0.01">
+        </div>
+        <div class="fg full" id="otherCurrencyOtherRow" style="display:none">
+          <label>Voluta (anders)</label>
+          <input type="text" id="otherCurrencyOther" placeholder="bijv. THB, MAD, ...">
+        </div>
+        <div class="fg full" style="margin-bottom:0">
           <label>Foto (bonnetje)</label>
           <div class="photo-upload">
             <input type="file" accept="image/*" multiple onchange="handlePhotos(event,'other')">
@@ -610,13 +640,17 @@ function changeMonth(dir) {
 }
 window.changeMonth = changeMonth;
 
+function getEurAmount(e) {
+  return (e.currency && e.currency !== 'EUR' && e.eurAmount != null) ? e.eurAmount : e.amount;
+}
+
 function updateMonthUI() {
   document.getElementById('monthLabel').textContent = `${MONTHS[currentMonth]} ${currentYear}`;
   document.getElementById('expCurrentLabel').textContent = `${MONTHS[currentMonth]} ${currentYear}`;
   document.getElementById('expYearLabel').textContent = `Heel ${currentYear}`;
   const entries = getMonthEntries();
   const kmTotal = entries.filter(e => e.kmType === 'km' || e.kmType === 'ww').reduce((s,e) => s + e.km * KM_RATE, 0);
-  const otherTotal = entries.filter(e => e.type === 'other').reduce((s,e) => s + e.amount, 0);
+  const otherTotal = entries.filter(e => e.type === 'other').reduce((s,e) => s + getEurAmount(e), 0);
   const total = kmTotal + otherTotal;
   document.getElementById('sumKm').textContent = formatEur(kmTotal);
   document.getElementById('sumOther').textContent = formatEur(otherTotal);
@@ -723,6 +757,25 @@ function getRouteString() {
   return [...document.getElementById('stopsList').querySelectorAll('input')].map(i => i.value.trim()).filter(Boolean).join(' → ');
 }
 
+const CURRENCY_SYMBOLS = { EUR:'€', USD:'$', GBP:'£', CHF:'CHF', JPY:'¥', CNY:'¥', SEK:'SEK', NOK:'NOK', DKK:'DKK', PLN:'PLN', CZK:'CZK', HUF:'HUF', HKD:'HKD', SGD:'SGD', AUD:'AUD', CAD:'CAD' };
+
+function onCurrencyChange() {
+  const sel = document.getElementById('otherCurrency').value;
+  const otherRow = document.getElementById('otherCurrencyOtherRow');
+  const eurRow = document.getElementById('eurAmountRow');
+  const label = document.getElementById('otherAmountLabel');
+  otherRow.style.display = sel === 'OTHER' ? 'block' : 'none';
+  if (sel === 'EUR') {
+    eurRow.style.display = 'none';
+    label.textContent = 'Bedrag (€)';
+  } else {
+    eurRow.style.display = 'block';
+    const sym = sel === 'OTHER' ? '' : (CURRENCY_SYMBOLS[sel] || sel);
+    label.textContent = sel === 'OTHER' ? 'Bedrag' : `Bedrag (${sym})`;
+  }
+}
+window.onCurrencyChange = onCurrencyChange;
+
 function onKmChange() {
   const km = parseFloat(document.getElementById('kmKm').value) || 0;
   const el = document.getElementById('kmPreview');
@@ -776,11 +829,17 @@ async function addEntry() {
       const type = document.getElementById('otherType').value;
       const desc = document.getElementById('otherDesc').value.trim();
       const amount = parseFloat(document.getElementById('otherAmount').value);
+      const currencySel = document.getElementById('otherCurrency').value;
+      const currency = currencySel === 'OTHER' ? (document.getElementById('otherCurrencyOther').value.trim().toUpperCase() || 'OTHER') : currencySel;
+      const eurAmountRaw = document.getElementById('otherEurAmount').value;
+      const eurAmount = eurAmountRaw ? parseFloat(eurAmountRaw) : null;
       if (!date) { toast('Vul een datum in'); btn.disabled = false; return; }
       if (!type) { toast('Selecteer een type'); btn.disabled = false; return; }
       if (!amount || amount<=0){ toast('Vul een geldig bedrag in'); btn.disabled = false; return; }
+      if (currency !== 'EUR' && (!eurAmount || eurAmount<=0)) { toast('Vul het EUR-bedrag in dat door de bank is afgeschreven'); btn.disabled = false; return; }
       await addDoc(collection(db, 'declaraties'), {
-        type: 'other', declType: type, desc, date, amount,
+        type: 'other', declType: type, desc, date, amount, currency,
+        eurAmount: currency === 'EUR' ? null : eurAmount,
         photos: pendingOther.filter(Boolean), uid: currentUser.uid, createdAt: Date.now()
       });
     }
@@ -798,8 +857,12 @@ function resetForm() {
   document.getElementById('wwToggle').classList.remove('active');
   document.getElementById('kmKm').readOnly = false;
   document.getElementById('routeSection').style.display = 'block';
-  ['kmKm','otherDesc','otherAmount'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  ['kmKm','otherDesc','otherAmount','otherEurAmount','otherCurrencyOther'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
   document.getElementById('otherType').value = '';
+  document.getElementById('otherCurrency').value = 'EUR';
+  document.getElementById('eurAmountRow').style.display = 'none';
+  document.getElementById('otherCurrencyOtherRow').style.display = 'none';
+  document.getElementById('otherAmountLabel').textContent = 'Bedrag (€)';
   document.getElementById('kmPreview').classList.remove('visible');
   pendingKm = []; pendingOther = [];
   document.getElementById('kmPhotoPreview').innerHTML = '';
@@ -819,7 +882,8 @@ function renderEntries(entries) {
   }
   list.innerHTML = entries.map(e => {
     const isKm = e.type === 'km', isWW = e.kmType === 'ww';
-    const amount = isKm ? e.km * KM_RATE : e.amount;
+    const isForeign = !isKm && e.currency && e.currency !== 'EUR';
+    const amount = isKm ? e.km * KM_RATE : getEurAmount(e);
     const photos = e.photos || [];
     const badgeClass = isWW ? 'badge-ww' : (isKm ? 'badge-km' : 'badge-other');
     const emoji = isWW ? '🏠' : (isKm ? '🚗' : getTypeEmoji(e.declType));
@@ -828,6 +892,7 @@ function renderEntries(entries) {
     const tagText = isWW ? 'Woon-werk' : (isKm ? `${e.km} km` : (e.declType||''));
     const title = isWW ? 'Woon-werk' : (isKm ? (e.route||'Kilometers') : (e.desc||e.declType||'Declaratie'));
     const subtitle = isKm && !isWW && e.route ? e.route : '';
+    const origAmountTxt = isForeign ? `${(CURRENCY_SYMBOLS[e.currency]||e.currency)} ${e.amount.toFixed(2).replace('.',',')}` : '';
     return `<div class="entry-card">
       <div class="entry-main">
         <div class="entry-badge ${badgeClass}">${emoji}</div>
@@ -837,6 +902,7 @@ function renderEntries(entries) {
           <div class="entry-meta">
             <span>📅 ${formatDate(e.date)}</span>
             <span class="tag ${tagClass}">${escHtml(tagText)}</span>
+            ${isForeign ? `<span class="tag ${tagClass}">💱 ${escHtml(origAmountTxt)}</span>` : ''}
             ${photos.length ? `<span>📎 ${photos.length}</span>` : ''}
           </div>
         </div>
@@ -988,7 +1054,7 @@ async function buildTravelExpenseReport(data) {
     const r = 12 + i, row = rows[i];
     sheetXml = setCellValue(sheetXml, `A${r}`, row.date, 's');
     sheetXml = setCellValue(sheetXml, `B${r}`, row.desc, 's');
-    sheetXml = setCellValue(sheetXml, `G${r}`, 'EUR', 's');
+    sheetXml = setCellValue(sheetXml, `G${r}`, row.currency, 's');
     if (row.H) sheetXml = setCellValue(sheetXml, `H${r}`, row.H, 'n');
     if (row.I) sheetXml = setCellValue(sheetXml, `I${r}`, row.I, 'n');
     if (row.J) sheetXml = setCellValue(sheetXml, `J${r}`, row.J, 'n');
@@ -1134,8 +1200,8 @@ function buildTravelRows(data) {
   }
   kmEntries.forEach(e => rows.push({ date: fmtDateEN(e.date), desc: e.route || 'Kilometers', currency: 'EUR', J: parseFloat((e.km*KM_RATE).toFixed(2)) }));
   otherEntries.forEach(e => {
-    const r = { date: fmtDateEN(e.date), desc: getDescriptionEN(e), currency:'EUR' };
-    r[getTravelCol(e)] = parseFloat(e.amount.toFixed(2));
+    const r = { date: fmtDateEN(e.date), desc: getDescriptionEN(e), currency: e.currency || 'EUR' };
+    r[getTravelCol(e)] = parseFloat(getEurAmount(e).toFixed(2));
     rows.push(r);
   });
   return rows;
@@ -1257,7 +1323,7 @@ async function buildExcelWithPhotos(data, filename) {
   const otherEntries = data.filter(e => e.type === 'other');
   const wwKmTotal = wwEntries.reduce((s,e) => s + e.km * KM_RATE, 0);
   const kmTotal = kmEntries.reduce((s,e) => s + e.km * KM_RATE, 0);
-  const otherTotal = otherEntries.reduce((s,e) => s + e.amount, 0);
+  const otherTotal = otherEntries.reduce((s,e) => s + getEurAmount(e), 0);
   const grandTotal = wwKmTotal + kmTotal + otherTotal;
   const sheetRows = [];
   sheetRows.push([`🏠 WOON-WERK KILOMETERS`]);
@@ -1273,9 +1339,9 @@ async function buildExcelWithPhotos(data, filename) {
   sheetRows.push(['','','', kmEntries.reduce((s,e)=>s+e.km,0), '', parseFloat(kmTotal.toFixed(2)), `Subtotaal overige km`]);
   sheetRows.push([]);
   sheetRows.push([`🧾 OVERIGE KOSTEN`]);
-  sheetRows.push(['Datum','Type','Omschrijving','','','Bedrag (€)','Bonnetjes']);
+  sheetRows.push(['Datum','Type','Omschrijving','Voluta','Bedrag (voluta)','Bedrag (€)','Bonnetjes']);
   if (otherEntries.length === 0) sheetRows.push(['Geen overige kosten in deze periode','','','','','','']);
-  else otherEntries.forEach(e => sheetRows.push([formatDate(e.date),e.declType||'Overig',e.desc||'','','',parseFloat(e.amount.toFixed(2)),(e.photos||[]).length>0?`${(e.photos||[]).length} foto('s) → zie Bonnetjes`:'-']));
+  else otherEntries.forEach(e => sheetRows.push([formatDate(e.date),e.declType||'Overig',e.desc||'',e.currency||'EUR',parseFloat(e.amount.toFixed(2)),parseFloat(getEurAmount(e).toFixed(2)),(e.photos||[]).length>0?`${(e.photos||[]).length} foto('s) → zie Bonnetjes`:'-']));
   sheetRows.push(['','','','','', parseFloat(otherTotal.toFixed(2)), `Subtotaal overige kosten`]);
   sheetRows.push([]);
   sheetRows.push(['TOTAAL WOON-WERK KM', '', '', wwEntries.reduce((s,e)=>s+e.km,0), '', parseFloat(wwKmTotal.toFixed(2)), '']);
