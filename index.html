@@ -940,10 +940,20 @@ async function buildTravelExpenseReport(data) {
 
   // ── Kolomsommen die bij rij 12 beginnen oprekken tot de echte laatste rij ──
   sheetXml = sheetXml.replace(/<f>([\s\S]*?)<\/f>/g, (s, f) => {
-    const fixed = f.replace(/SUM\(([A-Z]+)12:\1\s*(\d+)\)/g,
+    const fixed = f.replace(/SUM\(([A-Z]+)12:\1\s*\d+\)/g,
       (mm, col) => `SUM(${col}12:${col}${lastRow})`);
     return `<f>${fixed}</f>`;
   });
+
+  // ── Subtotaal-rij (22) had foute formules in het origineel — expliciet herstellen ──
+  const subtotalRow = lastRow + 1;
+  sheetXml = setCellValue(sheetXml, `H${subtotalRow}`, `SUM(H12:H${lastRow})`, 'f');
+  sheetXml = setCellValue(sheetXml, `I${subtotalRow}`, `SUM(I12:I${lastRow})`, 'f');
+  sheetXml = setCellValue(sheetXml, `J${subtotalRow}`, `SUM(J12:J${lastRow})`, 'f');
+  sheetXml = setCellValue(sheetXml, `K${subtotalRow}`, `SUM(K12:K${lastRow})`, 'f');
+  sheetXml = setCellValue(sheetXml, `L${subtotalRow}`, `SUM(L12:L${lastRow})`, 'f');
+  sheetXml = setCellValue(sheetXml, `M${subtotalRow}`, `SUM(M12:M${lastRow})`, 'f');
+  sheetXml = setCellValue(sheetXml, `O${subtotalRow}`, `SUM(O12:O${lastRow})`, 'f');
 
   if (extra > 0) await shiftSheet1Drawing(zip, extra);
   zip.file(sheetPath, sheetXml);
@@ -988,8 +998,10 @@ function ensureOpenRow(xml, rowNum) {
   return xml.replace(sd[0], sd[1] + newBody + sd[3]);
 }
 
-// Schuift drawing1 (logo e.d.) `extra` rijen omlaag
+// Schuift drawing1 (logo's) `extra` rijen omlaag — alleen het kleine voettekst-logo bij rij 29 e.v.
+// Het bovenste GP Batteries-logo (rij 0-4) staat los van de tabel en blijft altijd staan.
 async function shiftSheet1Drawing(zip, extra) {
+  if (extra <= 0) return;
   const path = 'xl/drawings/drawing1.xml';
   const file = zip.file(path);
   if (!file) return;
@@ -1101,7 +1113,7 @@ async function addReceiptsSheet(zip, data) {
   zip.file('xl/worksheets/sheet2.xml', sheet2Xml);
   if (photos.length > 0) {
     photos.forEach(p => zip.file(`xl/media/bonnetje${p.n+1}.${p.ext}`, base64ToUint8(p.base64)));
-    zip.file('xl/drawings/drawing2.xml', buildReceiptDrawingXml(photos));
+    zip.file('xl/drawings/drawing2.xml', buildReceiptDrawingXml(photos, PHOTO_ROWS));
     zip.file('xl/drawings/_rels/drawing2.xml.rels', buildReceiptDrawingRels(photos));
     zip.file('xl/worksheets/_rels/sheet2.xml.rels',
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
@@ -1131,18 +1143,24 @@ async function addReceiptsSheet(zip, data) {
   zip.file('[Content_Types].xml', ct);
 }
 
-function buildReceiptDrawingXml(photos) {
-  const IMG_W = 2700000, IMG_H = 4320000, GAP = 200000, LABEL = 400000;
+function buildReceiptDrawingXml(photos, photoRowsPerBlock) {
+  // oneCellAnchor: gekoppeld aan de echte rij in het sheet, dus de foto schuift altijd
+  // mee met de rij-hoogtes en kan nooit over het label van een ander bonnetje heen vallen.
+  const IMG_W = 2700000; // ~7.5cm breed, vaste afmeting
+  const IMG_H = 4320000; // ~12cm hoog
   const anchors = photos.map((p, i) => {
-    const top = i * (IMG_H + GAP + LABEL) + LABEL;
-    return `<xdr:absoluteAnchor><xdr:pos x="0" y="${top}"/><xdr:ext cx="${IMG_W}" cy="${IMG_H}"/>` +
+    const blockStartRow = i * (photoRowsPerBlock + 2); // 0-indexed: label-rij + foto-rijen + lege rij
+    const photoStartRow = blockStartRow + 1; // direct onder het label
+    return `<xdr:oneCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff>` +
+      `<xdr:row>${photoStartRow}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>` +
+      `<xdr:ext cx="${IMG_W}" cy="${IMG_H}"/>` +
       `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${i+2}" name="Bonnetje${i+1}" descr="${escXml(p.label)}"/>` +
       `<xdr:cNvPicPr><a:picLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>` +
       `<xdr:blipFill><a:blip xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" r:embed="rId${i+1}"/>` +
       `<a:stretch xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:fillRect/></a:stretch></xdr:blipFill>` +
       `<xdr:spPr><a:xfrm xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:off x="0" y="0"/><a:ext cx="${IMG_W}" cy="${IMG_H}"/></a:xfrm>` +
       `<a:prstGeom xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic>` +
-      `<xdr:clientData/></xdr:absoluteAnchor>`;
+      `<xdr:clientData/></xdr:oneCellAnchor>`;
   }).join('');
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
     `<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${anchors}</xdr:wsDr>`;
