@@ -74,13 +74,13 @@ header h1 { font-size: 15px; font-weight: 700; letter-spacing: -.3px; }
 .calendar-card { background: white; border: 1px solid var(--border); border-radius: var(--r); padding: 14px 16px; margin-bottom: 16px; box-shadow: var(--shadow); }
 .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: 8px; }
 .calendar-dow { font-size: 10px; font-weight: 700; color: var(--muted); text-align: center; text-transform: uppercase; letter-spacing: .3px; padding-bottom: 2px; }
-.calendar-day { aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: var(--r-sm); font-size: 12px; font-weight: 600; color: var(--text); cursor: default; position: relative; background: var(--bg); border: 1px solid transparent; }
-.calendar-day.empty { background: transparent; }
-.calendar-day.has-entry { background: var(--km-light); border-color: #DDD6FE; color: var(--km); cursor: pointer; }
-.calendar-day.has-entry:hover { background: var(--km); color: white; }
+.calendar-day { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; border-radius: var(--r-sm); font-size: 12px; font-weight: 600; color: var(--text); cursor: pointer; position: relative; background: var(--bg); border: 1px solid transparent; transition: background .15s; }
+.calendar-day:hover { background: var(--accent-light); }
+.calendar-day.empty { background: transparent; cursor: default; }
+.calendar-day.has-entry { background: var(--success-light); border-color: #BBF7D0; color: var(--success); }
+.calendar-day.has-entry:hover { background: var(--success); color: white; }
 .calendar-day.today { border-color: var(--accent); border-width: 2px; }
-.calendar-day .dot { width: 4px; height: 4px; border-radius: 50%; background: var(--km); margin-top: 1px; }
-.calendar-day.has-entry .dot { background: currentColor; }
+.calendar-day .count-badge { position: absolute; top: -4px; right: -4px; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px; background: var(--success); color: white; font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center; line-height: 1; }
 .summary-card { background: white; border: 1px solid var(--border); border-radius: var(--r); padding: 13px 15px; box-shadow: var(--shadow); }
 .summary-card .lbl { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 3px; }
 .summary-card .val { font-size: 20px; font-weight: 800; letter-spacing: -.5px; }
@@ -631,7 +631,8 @@ function updateMonthUI() {
 
 function renderCalendar(entries) {
   const grid = document.getElementById('calendarGrid');
-  const entryDates = new Set(entries.map(e => new Date(e.date).getDate()));
+  const entryCounts = {};
+  entries.forEach(e => { const d = new Date(e.date).getDate(); entryCounts[d] = (entryCounts[d] || 0) + 1; });
   const dows = ['Ma','Di','Wo','Do','Vr','Za','Zo'];
   let html = dows.map(d => `<div class="calendar-dow">${d}</div>`).join('');
 
@@ -646,16 +647,29 @@ function renderCalendar(entries) {
   const isCurrentMonthToday = today.getFullYear() === currentYear && today.getMonth() === currentMonth;
 
   for (let day = 1; day <= daysInMonth; day++) {
-    const hasEntry = entryDates.has(day);
+    const count = entryCounts[day] || 0;
     const isToday = isCurrentMonthToday && today.getDate() === day;
     const classes = ['calendar-day'];
-    if (hasEntry) classes.push('has-entry');
+    if (count > 0) classes.push('has-entry');
     if (isToday) classes.push('today');
-    html += `<div class="${classes.join(' ')}" title="${hasEntry ? 'Declaratie op deze dag' : ''}">${day}${hasEntry ? '<span class="dot"></span>' : ''}</div>`;
+    const badge = count > 0 ? `<span class="count-badge">${count}</span>` : '';
+    const title = count > 0 ? `${count} declaratie${count !== 1 ? 's' : ''} op deze dag` : 'Klik om een declaratie toe te voegen op deze dag';
+    html += `<div class="${classes.join(' ')}" onclick="selectCalendarDay(${day})" title="${title}">${day}${badge}</div>`;
   }
 
   grid.innerHTML = html;
 }
+
+function selectCalendarDay(day) {
+  const m = String(currentMonth + 1).padStart(2, '0');
+  const d = String(day).padStart(2, '0');
+  const dateStr = `${currentYear}-${m}-${d}`;
+  document.getElementById('kmDate').value = dateStr;
+  document.getElementById('otherDate').value = dateStr;
+  document.querySelector('.form-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  toast(`📅 Datum ingesteld op ${d}-${m}-${currentYear}`);
+}
+window.selectCalendarDay = selectCalendarDay;
 
 function getMonthEntries() {
   return allEntries.filter(e => { const d = new Date(e.date); return d.getFullYear() === currentYear && d.getMonth() === currentMonth; })
