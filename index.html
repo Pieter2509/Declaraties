@@ -970,7 +970,12 @@ function getDescriptionEN(entry) {
 }
 
 async function generateTravelExpense() {
-  const data = getMonthEntries();
+  const data = getMonthEntries().filter(e => {
+    const d = new Date(e.date);
+    const inMonth = d.getFullYear() === currentYear && d.getMonth() === currentMonth;
+    if (!inMonth) console.warn('Entry buiten geselecteerde maand overgeslagen in Travel Report:', e.id, e.date);
+    return inMonth;
+  });
   if (data.length === 0) { toast('Geen declaraties voor deze maand'); return; }
   toast('⏳ Travel Expense Report wordt aangemaakt...');
   setLoading(true);
