@@ -69,6 +69,18 @@ header h1 { font-size: 15px; font-weight: 700; letter-spacing: -.3px; }
 
 /* ── SUMMARY ── */
 .summary-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 16px; }
+
+/* CALENDAR */
+.calendar-card { background: white; border: 1px solid var(--border); border-radius: var(--r); padding: 14px 16px; margin-bottom: 16px; box-shadow: var(--shadow); }
+.calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: 8px; }
+.calendar-dow { font-size: 10px; font-weight: 700; color: var(--muted); text-align: center; text-transform: uppercase; letter-spacing: .3px; padding-bottom: 2px; }
+.calendar-day { aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: var(--r-sm); font-size: 12px; font-weight: 600; color: var(--text); cursor: default; position: relative; background: var(--bg); border: 1px solid transparent; }
+.calendar-day.empty { background: transparent; }
+.calendar-day.has-entry { background: var(--km-light); border-color: #DDD6FE; color: var(--km); cursor: pointer; }
+.calendar-day.has-entry:hover { background: var(--km); color: white; }
+.calendar-day.today { border-color: var(--accent); border-width: 2px; }
+.calendar-day .dot { width: 4px; height: 4px; border-radius: 50%; background: var(--km); margin-top: 1px; }
+.calendar-day.has-entry .dot { background: currentColor; }
 .summary-card { background: white; border: 1px solid var(--border); border-radius: var(--r); padding: 13px 15px; box-shadow: var(--shadow); }
 .summary-card .lbl { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 3px; }
 .summary-card .val { font-size: 20px; font-weight: 800; letter-spacing: -.5px; }
@@ -295,6 +307,12 @@ textarea { resize: vertical; min-height: 58px; }
       <div class="lbl">💰 Totaal</div>
       <div class="val" id="sumTotal">€0,00</div>
     </div>
+  </div>
+
+  <!-- CALENDAR -->
+  <div class="calendar-card">
+    <div class="form-card-title">📅 Maandoverzicht</div>
+    <div class="calendar-grid" id="calendarGrid"></div>
   </div>
 
   <!-- ADD FORM -->
@@ -607,7 +625,36 @@ function updateMonthUI() {
   document.getElementById('entriesTitle').textContent = `Declaraties ${MONTHS[currentMonth]} ${currentYear}`;
   const n = entries.length;
   document.getElementById('entryCount').textContent = `${n} item${n !== 1 ? 's' : ''}`;
+  renderCalendar(entries);
   renderEntries(entries);
+}
+
+function renderCalendar(entries) {
+  const grid = document.getElementById('calendarGrid');
+  const entryDates = new Set(entries.map(e => new Date(e.date).getDate()));
+  const dows = ['Ma','Di','Wo','Do','Vr','Za','Zo'];
+  let html = dows.map(d => `<div class="calendar-dow">${d}</div>`).join('');
+
+  const firstOfMonth = new Date(currentYear, currentMonth, 1);
+  let startOffset = firstOfMonth.getDay() - 1; // maandag = 0
+  if (startOffset < 0) startOffset = 6;
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+  for (let i = 0; i < startOffset; i++) html += `<div class="calendar-day empty"></div>`;
+
+  const today = new Date();
+  const isCurrentMonthToday = today.getFullYear() === currentYear && today.getMonth() === currentMonth;
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const hasEntry = entryDates.has(day);
+    const isToday = isCurrentMonthToday && today.getDate() === day;
+    const classes = ['calendar-day'];
+    if (hasEntry) classes.push('has-entry');
+    if (isToday) classes.push('today');
+    html += `<div class="${classes.join(' ')}" title="${hasEntry ? 'Declaratie op deze dag' : ''}">${day}${hasEntry ? '<span class="dot"></span>' : ''}</div>`;
+  }
+
+  grid.innerHTML = html;
 }
 
 function getMonthEntries() {
