@@ -710,6 +710,26 @@ function getMonthEntries() {
     .sort((a,b) => new Date(b.date) - new Date(a.date));
 }
 
+function debugDates() {
+  console.log('--- DEBUG: alle entries in allEntries ---');
+  console.log('currentMonth (0-indexed):', currentMonth, '| currentYear:', currentYear);
+  allEntries.forEach(e => {
+    const d = new Date(e.date);
+    console.log({
+      id: e.id,
+      desc: e.desc || e.route || '(km)',
+      rawDateValue: e.date,
+      rawDateType: typeof e.date,
+      parsedMonth: d.getMonth(),
+      parsedYear: d.getFullYear(),
+      parsedValid: !isNaN(d.getTime()),
+      matchesCurrentFilter: d.getFullYear() === currentYear && d.getMonth() === currentMonth
+    });
+  });
+  console.log('--- EINDE DEBUG ---');
+}
+window.debugDates = debugDates;
+
 function switchTab(tab) {
   currentTab = tab;
   document.getElementById('formKm').style.display = tab === 'km' ? 'block' : 'none';
