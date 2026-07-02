@@ -1092,9 +1092,12 @@ async function buildTravelExpenseReport(data) {
     if (row.L) sheetXml = setCellValue(sheetXml, `L${r}`, row.L, 'n');
     sheetXml = setCellValue(sheetXml, `M${r}`, `SUM(H${r}:L${r})`, 'f');
     const localTotal = (row.H||0)+(row.I||0)+(row.J||0)+(row.K||0)+(row.L||0);
-    const rate = (row.currency && row.currency !== 'EUR' && localTotal > 0) ? parseFloat((row.eur / localTotal).toFixed(6)) : 1;
+    // Kolom O (Total EUR): bij vreemde valuta rechtstreeks het bankbedrag in euro (row.eur),
+    // anders gelijk aan het lokale totaal. Als vast getal, zodat het altijd gevuld is.
+    const eurTotal = (row.currency && row.currency !== 'EUR' && row.eur != null) ? row.eur : localTotal;
+    const rate = (localTotal > 0) ? parseFloat((eurTotal / localTotal).toFixed(6)) : 1;
     sheetXml = setCellValue(sheetXml, `N${r}`, rate, 'n');
-    sheetXml = setCellValue(sheetXml, `O${r}`, `M${r}*N${r}`, 'f');
+    sheetXml = setCellValue(sheetXml, `O${r}`, parseFloat(eurTotal.toFixed(2)), 'n');
   }
 
   // ── Kolomsommen die bij rij 12 beginnen oprekken tot de echte laatste rij ──
