@@ -1104,8 +1104,9 @@ async function buildTravelExpenseReport(data) {
     return `<f>${fixed}</f>`;
   });
 
-  // ── Subtotaal-rij (22) had foute formules in het origineel — expliciet herstellen ──
-  const subtotalRow = lastRow + 1;
+  // ── Subtotaal-rij: staat in het template vast op rij 22 en schuift bij >10 regels
+  //    mee omlaag met `extra`. (lastRow+1 klopte alleen bij precies 10 of bij uitbreiding.) ──
+  const subtotalRow = 22 + extra;
   sheetXml = setCellValue(sheetXml, `H${subtotalRow}`, `SUM(H12:H${lastRow})`, 'f');
   sheetXml = setCellValue(sheetXml, `I${subtotalRow}`, `SUM(I12:I${lastRow})`, 'f');
   sheetXml = setCellValue(sheetXml, `J${subtotalRow}`, `SUM(J12:J${lastRow})`, 'f');
