@@ -603,6 +603,7 @@ const TRANSLATIONS = {
     profileSubtitle: 'Deze gegevens worden gebruikt in het Travel Expense Report.',
     name: 'Naam',
     employeeNo: 'Personeelsnummer',
+    managerName: 'Manager naam (optioneel)',
     department: 'Department',
     costCentre: 'Cost Centre',
     eurAmountLabel: 'Bedrag in € (zoals afgeschreven door de bank)',
@@ -691,6 +692,7 @@ const TRANSLATIONS = {
     profileSubtitle: 'This information is used in the Travel Expense Report.',
     name: 'Name',
     employeeNo: 'Employee number',
+    managerName: 'Manager name (optional)',
     department: 'Department',
     costCentre: 'Cost centre',
     eurAmountLabel: 'Amount in € (as charged by the bank)',
@@ -806,6 +808,10 @@ window.TRAVEL_TEMPLATE_B64 = TRAVEL_TEMPLATE_B64;
         <div class="fg">
           <label data-i18n="employeeNo">Personeelsnummer</label>
           <input type="text" id="profileEmployeeNo" placeholder="bijv. 026">
+        </div>
+        <div class="fg">
+          <label data-i18n="managerName">Manager naam (optioneel)</label>
+          <input type="text" id="profileManagerName" placeholder="bijv. [Manager name]">
         </div>
         <div class="fg">
           <label data-i18n="department">Department</label>
@@ -958,7 +964,7 @@ async function loadUserProfile(user) {
   if (snap.exists()) {
     userProfile = snap.data();
   } else {
-    userProfile = { name: user.displayName || '', employeeNo: '', department: 'GPBE', costCentre: '' };
+    userProfile = { name: user.displayName || '', employeeNo: '', managerName: '', department: 'GPBE', costCentre: '' };
     openProfileModal(true);
   }
 }
@@ -967,6 +973,7 @@ function openProfileModal(firstTime = false) {
   const p = userProfile || {};
   document.getElementById('profileName').value = p.name || '';
   document.getElementById('profileEmployeeNo').value = p.employeeNo || '';
+  document.getElementById('profileManagerName').value = p.managerName || '';
   document.getElementById('profileDepartment').value = p.department || 'GPBE';
   document.getElementById('profileCostCentre').value = p.costCentre || '';
   document.getElementById('profileModalTitle').textContent = firstTime ? t('profileModalFirstTime') : t('profileModalTitle');
@@ -977,10 +984,11 @@ window.openProfileModal = openProfileModal;
 async function saveProfile() {
   const name = document.getElementById('profileName').value.trim();
   const employeeNo = document.getElementById('profileEmployeeNo').value.trim();
+  const managerName = document.getElementById('profileManagerName').value.trim();
   const department = document.getElementById('profileDepartment').value.trim();
   const costCentre = document.getElementById('profileCostCentre').value.trim();
   if (!name || !employeeNo) { toast(t('toastFillProfile')); return; }
-  userProfile = { name, employeeNo, department, costCentre };
+  userProfile = { name, employeeNo, managerName, department, costCentre };
   await setDoc(doc(db, 'users', currentUser.uid), userProfile);
   closeModal('profileModal');
   toast(t('toastProfileSaved'));
@@ -1447,35 +1455,66 @@ async function buildTravelExpenseReport(data) {
       (m, attrs) => { const sm = attrs.match(/ s="\d+"/); return `<c r="${ref}"${sm?sm[0]:''}/>`; });
   }
 
-  const extra   = Math.max(0, rows.length - 10);
-  const lastRow = 11 + rows.length;
+  const DATA_START_ROW = 12;
+  const TEMPLATE_DATA_END_ROW = 21;
+  const TEMPLATE_ROW_COUNT = TEMPLATE_DATA_END_ROW - DATA_START_ROW + 1;
+
+  // De template heeft standaard 10 invulrijen (12 t/m 21).
+  // Bij minder dan 10 declaraties moet de subtotalrij dus op rij 22 blijven staan.
+  const extra = Math.max(0, rows.length - TEMPLATE_ROW_COUNT);
   if (extra > 0) sheetXml = expandTemplateRows(sheetXml, extra);
 
-  const allCols = ['A','H','I','J','K','L','M','N','O'];
-  for (let r = 12; r <= lastRow; r++) for (const col of allCols) sheetXml = clearCell(sheetXml, `${col}${r}`);
+  const lastDataRow = TEMPLATE_DATA_END_ROW + extra;
+  const subtotalRow = lastDataRow + 1;
+  const otherAdjustmentRow = subtotalRow + 1;
+  const totalExpenditureRow = subtotalRow + 2;
+  const cashRefundRow = subtotalRow + 4;
+  const signatureNameRow = subtotalRow + 6;
+  const advanceAmountRow = subtotalRow + 6;
+  const amountToBePaidRow = subtotalRow + 7;
 
-  // Medewerkergegevens uit profiel
+  const allCols = ['A','B','G','H','I','J','K','L','M','N','O'];
+  for (let r = DATA_START_ROW; r <= lastDataRow; r++) {
+    for (const col of allCols) sheetXml = clearCell(sheetXml, `${col}${r}`);
+  }
+
+  // Medewerkergegevens uit profiel / Google-login
   const p = userProfile || {};
-  sheetXml = setCellValue(sheetXml, 'C5', p.name || (currentUser ? currentUser.displayName : '') || '', 's');
+  const employeeName = (currentUser && currentUser.displayName) || p.name || '';
+  const managerName = p.managerName || '';
+  sheetXml = setCellValue(sheetXml, 'C5', employeeName, 's');
   sheetXml = setCellValue(sheetXml, 'H5', p.employeeNo || '', 's');
-  if (p.department) sheetXml = setCellValue(sheetXml, 'M5', p.department, 's');
-  if (p.costCentre) sheetXml = setCellValue(sheetXml, 'L7', p.costCentre, 's');
+  sheetXml = setCellValue(sheetXml, 'M5', p.department || 'GPBE', 's');
+  sheetXml = setCellValue(sheetXml, 'L7', p.costCentre || '', 's');
+
+  // Onderaan bij handtekeningen invullen
+  sheetXml = setCellValue(sheetXml, `A${signatureNameRow}`, `Name: ${employeeName}`, 's');
+  sheetXml = setCellValue(sheetXml, `C${signatureNameRow}`, managerName ? `Name: ${managerName}` : 'Name:', 's');
 
   // Duration als tekst
   sheetXml = setCellValue(sheetXml, 'C7', fmtDateEN(firstDay), 's');
   sheetXml = setCellValue(sheetXml, 'E7', fmtDateEN(lastDay), 's');
 
-  // Datarijen (datum als tekst, plus per-rij Total-formules)
+  // Alle template-datarijen krijgen een juiste formule. Zo verdwijnt de "extra" rij
+  // die eerst als een tweede commute leek te verschijnen.
+  for (let r = DATA_START_ROW; r <= lastDataRow; r++) {
+    sheetXml = setCellValue(sheetXml, `M${r}`, `SUM(H${r}:L${r})`, 'f');
+    sheetXml = setCellValue(sheetXml, `N${r}`, 1, 'n');
+    sheetXml = setCellValue(sheetXml, `O${r}`, `M${r}*N${r}`, 'f');
+  }
+
+  // Datarijen invullen
   for (let i = 0; i < rows.length; i++) {
-    const r = 12 + i, row = rows[i];
+    const r = DATA_START_ROW + i, row = rows[i];
     sheetXml = setCellValue(sheetXml, `A${r}`, row.date, 's');
     sheetXml = setCellValue(sheetXml, `B${r}`, row.desc, 's');
     sheetXml = setCellValue(sheetXml, `G${r}`, row.currency, 's');
-    if (row.H) sheetXml = setCellValue(sheetXml, `H${r}`, row.H, 'n');
-    if (row.I) sheetXml = setCellValue(sheetXml, `I${r}`, row.I, 'n');
-    if (row.J) sheetXml = setCellValue(sheetXml, `J${r}`, row.J, 'n');
-    if (row.K) sheetXml = setCellValue(sheetXml, `K${r}`, row.K, 'n');
-    if (row.L) sheetXml = setCellValue(sheetXml, `L${r}`, row.L, 'n');
+    if (row.H != null) sheetXml = setCellValue(sheetXml, `H${r}`, row.H, 'n');
+    if (row.I != null) sheetXml = setCellValue(sheetXml, `I${r}`, row.I, 'n');
+    if (row.J != null) sheetXml = setCellValue(sheetXml, `J${r}`, row.J, 'n');
+    if (row.K != null) sheetXml = setCellValue(sheetXml, `K${r}`, row.K, 'n');
+    if (row.L != null) sheetXml = setCellValue(sheetXml, `L${r}`, row.L, 'n');
+
     sheetXml = setCellValue(sheetXml, `M${r}`, `SUM(H${r}:L${r})`, 'f');
     const localTotal = (row.H||0)+(row.I||0)+(row.J||0)+(row.K||0)+(row.L||0);
     const rate = (row.currency && row.currency !== 'EUR' && localTotal > 0) ? parseFloat((row.eur / localTotal).toFixed(6)) : 1;
@@ -1483,25 +1522,34 @@ async function buildTravelExpenseReport(data) {
     sheetXml = setCellValue(sheetXml, `O${r}`, `M${r}*N${r}`, 'f');
   }
 
-  // ── Kolomsommen die bij rij 12 beginnen oprekken tot de echte laatste rij ──
-  sheetXml = sheetXml.replace(/<f>([\s\S]*?)<\/f>/g, (s, f) => {
-    const fixed = f.replace(/SUM\(([A-Z]+)12:\1\s*\d+\)/g,
-      (mm, col) => `SUM(${col}12:${col}${lastRow})`);
-    return `<f>${fixed}</f>`;
-  });
+  // Subtotaal en eindtotalen expliciet herstellen
+  sheetXml = setCellValue(sheetXml, `H${subtotalRow}`, `SUM(H12:H${lastDataRow})`, 'f');
+  sheetXml = setCellValue(sheetXml, `I${subtotalRow}`, `SUM(I12:I${lastDataRow})`, 'f');
+  sheetXml = setCellValue(sheetXml, `J${subtotalRow}`, `SUM(J12:J${lastDataRow})`, 'f');
+  sheetXml = setCellValue(sheetXml, `K${subtotalRow}`, `SUM(K12:K${lastDataRow})`, 'f');
+  sheetXml = setCellValue(sheetXml, `L${subtotalRow}`, `SUM(L12:L${lastDataRow})`, 'f');
+  sheetXml = setCellValue(sheetXml, `M${subtotalRow}`, `SUM(M12:M${lastDataRow})`, 'f');
+  sheetXml = setCellValue(sheetXml, `O${subtotalRow}`, `SUM(O12:O${lastDataRow})`, 'f');
 
-  // ── Subtotaal-rij (22) had foute formules in het origineel — expliciet herstellen ──
-  const subtotalRow = lastRow + 1;
-  sheetXml = setCellValue(sheetXml, `H${subtotalRow}`, `SUM(H12:H${lastRow})`, 'f');
-  sheetXml = setCellValue(sheetXml, `I${subtotalRow}`, `SUM(I12:I${lastRow})`, 'f');
-  sheetXml = setCellValue(sheetXml, `J${subtotalRow}`, `SUM(J12:J${lastRow})`, 'f');
-  sheetXml = setCellValue(sheetXml, `K${subtotalRow}`, `SUM(K12:K${lastRow})`, 'f');
-  sheetXml = setCellValue(sheetXml, `L${subtotalRow}`, `SUM(L12:L${lastRow})`, 'f');
-  sheetXml = setCellValue(sheetXml, `M${subtotalRow}`, `SUM(M12:M${lastRow})`, 'f');
-  sheetXml = setCellValue(sheetXml, `O${subtotalRow}`, `SUM(O12:O${lastRow})`, 'f');
+  sheetXml = setCellValue(sheetXml, `O${otherAdjustmentRow}`, 0, 'n');
+  sheetXml = setCellValue(sheetXml, `O${totalExpenditureRow}`, `SUM(O${subtotalRow}:O${otherAdjustmentRow})`, 'f');
+  sheetXml = setCellValue(sheetXml, `O${cashRefundRow}`, 0, 'n');
+  sheetXml = setCellValue(sheetXml, `O${advanceAmountRow}`, 0, 'n');
+  sheetXml = setCellValue(sheetXml, `O${amountToBePaidRow}`, `O${totalExpenditureRow}+O${cashRefundRow}-O${advanceAmountRow}`, 'f');
 
   if (extra > 0) await shiftSheet1Drawing(zip, extra);
   zip.file(sheetPath, sheetXml);
+
+  // Forceer Excel/Numbers/LibreOffice om de aangepaste formules opnieuw te berekenen.
+  let workbookXml = await zip.file('xl/workbook.xml').async('string');
+  if (/<calcPr\b[^>]*\/>/.test(workbookXml)) {
+    workbookXml = workbookXml.replace(/<calcPr\b[^>]*\/>/, '<calcPr calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"/>');
+  } else if (/<calcPr\b[^>]*>[\s\S]*?<\/calcPr>/.test(workbookXml)) {
+    workbookXml = workbookXml.replace(/<calcPr\b[^>]*>[\s\S]*?<\/calcPr>/, '<calcPr calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"/>');
+  } else {
+    workbookXml = workbookXml.replace('</workbook>', '<calcPr calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"/></workbook>');
+  }
+  zip.file('xl/workbook.xml', workbookXml);
 
   await addReceiptsSheet(zip, data);
 
@@ -1552,7 +1600,10 @@ async function shiftSheet1Drawing(zip, extra) {
   const file = zip.file(path);
   if (!file) return;
   let xml = await file.async('string');
-  xml = xml.replace(/<xdr:row>(\d+)<\/xdr:row>/g, (m, n) => `<xdr:row>${+n + extra}</xdr:row>`);
+  xml = xml.replace(/<xdr:row>(\d+)<\/xdr:row>/g, (m, n) => {
+    const row = Number(n);
+    return `<xdr:row>${row >= 20 ? row + extra : row}</xdr:row>`;
+  });
   zip.file(path, xml);
 }
 
