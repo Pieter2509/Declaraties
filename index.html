@@ -517,10 +517,10 @@ textarea { resize: vertical; min-height: 58px; }
       <p style="font-size:11px;color:var(--muted);margin-bottom:14px" data-i18n="kmRate">Km-tarief: €0,23 per km (wettelijk tarief 2026)</p>
       <div style="border-top:1px solid var(--border);padding-top:14px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <span style="font-size:12px;color:var(--muted)" id="userName">—</span>
+          <span style="font-size:12px;color:var(--muted)" id="userName"></span>
           <button class="btn btn-secondary btn-sm" onclick="logout();closeModal('settingsModal')" style="color:var(--danger);border-color:var(--danger)" data-i18n="logout">Uitloggen</button>
         </div>
-        <button class="btn btn-secondary btn-sm" onclick="closeModal('settingsModal');openProfileModal(false)" style="width:100%" data-i18n="myProfile">👤 Mijn gegevens (Travel Report)</button>
+        <button class="btn btn-secondary btn-sm" onclick="closeModal('settingsModal');setTimeout(()=>openProfileModal(false),50)" style="width:100%" data-i18n="myProfile">👤 Mijn gegevens (Travel Report)</button>
       </div>
     </div>
     <div class="modal-footer">
@@ -631,7 +631,6 @@ const TRANSLATIONS = {
     toastExportFailed: '❌ Export mislukt',
     toastGenerateFailed: '❌ Genereren mislukt: ',
     toastLoginFailed: '❌ Inloggen mislukt. Probeer opnieuw.',
-    toastEmailNotAllowed: 'Geen toegang: dit e-mailadres staat niet op de lijst.',
     toastLoggedOut: 'Uitgelogd',
     dateSet: (d,m,y) => `📅 Datum ingesteld op ${d}-${m}-${y}`,
     commuteAutoText: 'Automatisch',
@@ -720,7 +719,6 @@ const TRANSLATIONS = {
     toastExportFailed: '❌ Export failed',
     toastGenerateFailed: '❌ Generation failed: ',
     toastLoginFailed: '❌ Sign in failed. Please try again.',
-    toastEmailNotAllowed: 'Access denied: this email address is not on the allowed list.',
     toastLoggedOut: 'Signed out',
     dateSet: (d,m,y) => `📅 Date set to ${m}/${d}/${y}`,
     commuteAutoText: 'Auto-fill',
@@ -794,28 +792,30 @@ const TRAVEL_TEMPLATE_B64 = "UEsDBBQABgAIAAAAIQCoIpwJxgEAALsIAAATAAgCW0NvbnRlbnR
       <h3>👤 <span id="profileModalTitle">Mijn gegevens</span></h3>
       <button class="modal-close" onclick="closeModal('profileModal')">✕</button>
     </div>
-    <p style="font-size:12px;color:var(--muted);margin-bottom:16px" data-i18n="profileSubtitle">Deze gegevens worden gebruikt in het Travel Expense Report.</p>
-    <div class="form-grid" style="grid-template-columns:1fr 1fr">
-      <div class="fg full">
-        <label data-i18n="name">Naam</label>
-        <input type="text" id="profileName" placeholder="bijv. Pieter Hollanders">
-      </div>
-      <div class="fg">
-        <label data-i18n="employeeNo">Personeelsnummer</label>
-        <input type="text" id="profileEmployeeNo" placeholder="bijv. 026">
-      </div>
-      <div class="fg">
-        <label data-i18n="department">Department</label>
-        <input type="text" id="profileDepartment" placeholder="bijv. GPBE">
-      </div>
-      <div class="fg full">
-        <label data-i18n="costCentre">Cost Centre</label>
-        <input type="text" id="profileCostCentre" placeholder="bijv. MAR6">
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--muted);margin-bottom:16px" data-i18n="profileSubtitle">Deze gegevens worden gebruikt in het Travel Expense Report.</p>
+      <div class="form-grid" style="grid-template-columns:1fr 1fr">
+        <div class="fg full">
+          <label data-i18n="name">Naam</label>
+          <input type="text" id="profileName" placeholder="bijv. Pieter Hollanders">
+        </div>
+        <div class="fg">
+          <label data-i18n="employeeNo">Personeelsnummer</label>
+          <input type="text" id="profileEmployeeNo" placeholder="bijv. 026">
+        </div>
+        <div class="fg">
+          <label data-i18n="department">Department</label>
+          <input type="text" id="profileDepartment" placeholder="bijv. GPBE">
+        </div>
+        <div class="fg full">
+          <label data-i18n="costCentre">Cost Centre</label>
+          <input type="text" id="profileCostCentre" placeholder="bijv. MAR6">
+        </div>
       </div>
     </div>
-    <div style="display:flex;gap:8px;margin-top:18px">
-      <button class="btn btn-secondary" onclick="closeModal('profileModal')" style="flex:1" data-i18n="cancel">Annuleren</button>
-      <button class="btn btn-primary" onclick="saveProfile()" style="flex:1" data-i18n="save">Opslaan</button>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('profileModal')" data-i18n="cancel">Annuleren</button>
+      <button class="btn btn-primary" onclick="saveProfile()" data-i18n="save">Opslaan</button>
     </div>
   </div>
 </div>
@@ -823,7 +823,7 @@ const TRAVEL_TEMPLATE_B64 = "UEsDBBQABgAIAAAAIQCoIpwJxgEAALsIAAATAAgCW0NvbnRlbnR
 <!-- ══ FIREBASE SDK ══════════════════════════════════════════════ -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, collection, addDoc, deleteDoc, doc, query, onSnapshot, where, getDoc, setDoc }
+import { getFirestore, collection, addDoc, deleteDoc, doc, query, orderBy, onSnapshot, where, getDoc, setDoc }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
@@ -850,18 +850,6 @@ const FIREBASE_CONFIG = {
   appId: "1:604875463551:web:21a05c871fe39af0ab184a"
 };
 
-// Vul hier de Google-accounts in die de declaratie-app mogen gebruiken.
-// Laat de lijst leeg [] als iedereen met een Google-account mag inloggen.
-const ALLOWED_EMAILS = [
-  // 'jij@bedrijf.nl',
-  // 'collega@bedrijf.nl',
-].map(email => email.toLowerCase());
-
-function isAllowedUser(user) {
-  if (ALLOWED_EMAILS.length === 0) return true;
-  return !!(user && user.email && ALLOWED_EMAILS.includes(user.email.toLowerCase()));
-}
-
 function getWwKm() { return parseInt(localStorage.getItem(WW_KEY) || '60', 10); }
 
 async function startApp() {
@@ -871,19 +859,9 @@ async function startApp() {
   const wwKmVal = getWwKm();
   document.getElementById('wwKmLabel').textContent = wwKmVal * 2;
   document.getElementById('settingWwKm').value = wwKmVal;
-  onAuthStateChanged(auth, async user => {
+  onAuthStateChanged(auth, user => {
     currentUser = user;
     if (user) {
-      if (!isAllowedUser(user)) {
-        currentUser = null;
-        document.getElementById('loginScreen').style.display = 'flex';
-        document.getElementById('appContent').style.display = 'none';
-        if (unsubscribe) { unsubscribe(); unsubscribe = null; }
-        toast(t('toastEmailNotAllowed'));
-        await signOut(auth);
-        setLoading(false);
-        return;
-      }
       document.getElementById('loginScreen').style.display = 'none';
       document.getElementById('appContent').style.display = 'block';
       document.getElementById('userAvatar').src = user.photoURL || '';
@@ -915,7 +893,7 @@ async function loadUserProfile(user) {
   if (snap.exists()) {
     userProfile = snap.data();
   } else {
-    userProfile = { name: user.displayName || '', employeeNo: '', department: 'GPBE', costCentre: '', email: user.email || '', uid: user.uid };
+    userProfile = { name: user.displayName || '', employeeNo: '', department: 'GPBE', costCentre: '' };
     openProfileModal(true);
   }
 }
@@ -937,8 +915,8 @@ async function saveProfile() {
   const department = document.getElementById('profileDepartment').value.trim();
   const costCentre = document.getElementById('profileCostCentre').value.trim();
   if (!name || !employeeNo) { toast(t('toastFillProfile')); return; }
-  userProfile = { name, employeeNo, department, costCentre, email: currentUser.email || '', uid: currentUser.uid, updatedAt: Date.now() };
-  await setDoc(doc(db, 'users', currentUser.uid), userProfile, { merge: true });
+  userProfile = { name, employeeNo, department, costCentre };
+  await setDoc(doc(db, 'users', currentUser.uid), userProfile);
   closeModal('profileModal');
   toast(t('toastProfileSaved'));
 }
@@ -948,15 +926,9 @@ function subscribeEntries() {
   const dot = document.getElementById('syncDot');
   dot.className = 'sync-dot';
   if (unsubscribe) unsubscribe();
-  const q = query(collection(db, 'declaraties'), where('uid','==',currentUser.uid));
+  const q = query(collection(db, 'declaraties'), where('uid','==',currentUser.uid), orderBy('date','desc'));
   unsubscribe = onSnapshot(q,
-    snapshot => {
-      allEntries = snapshot.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
-      dot.className = 'sync-dot ok';
-      updateMonthUI();
-    },
+    snapshot => { allEntries = snapshot.docs.map(d => ({ id: d.id, ...d.data() })); dot.className = 'sync-dot ok'; updateMonthUI(); },
     err => { dot.className = 'sync-dot err'; console.error(err); }
   );
 }
@@ -1171,7 +1143,7 @@ async function addEntry() {
       const route = wwActive ? 'Woon-werk' : getRouteString();
       await addDoc(collection(db, 'declaraties'), {
         type: 'km', kmType: wwActive ? 'ww' : 'km', date, km, route,
-        photos: pendingKm.filter(Boolean), uid: currentUser.uid, userEmail: currentUser.email || '', createdAt: Date.now()
+        photos: pendingKm.filter(Boolean), uid: currentUser.uid, createdAt: Date.now()
       });
     } else {
       const date = document.getElementById('otherDate').value;
@@ -1189,7 +1161,7 @@ async function addEntry() {
       await addDoc(collection(db, 'declaraties'), {
         type: 'other', declType: type, desc, date, amount, currency,
         eurAmount: currency === 'EUR' ? null : eurAmount,
-        photos: pendingOther.filter(Boolean), uid: currentUser.uid, userEmail: currentUser.email || '', createdAt: Date.now()
+        photos: pendingOther.filter(Boolean), uid: currentUser.uid, createdAt: Date.now()
       });
     }
     const savedDate = currentTab === 'km' ? document.getElementById('kmDate').value : document.getElementById('otherDate').value;
@@ -1834,6 +1806,7 @@ function openLightbox(src) { document.getElementById('lightboxImg').src = src; d
 window.openLightbox = openLightbox;
 function closeLightbox() { document.getElementById('lightbox').classList.remove('open'); }
 window.closeLightbox = closeLightbox;
+function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 window.closeModal = closeModal;
 
