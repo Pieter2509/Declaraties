@@ -24,6 +24,8 @@
   --ww: #0891B2;
   --ww-light: #ECFEFF;
   --orange: #EA580C;
+  --zk: #B45309;
+  --zk-light: #FFFBEB;
   --shadow: 0 1px 3px rgba(0,0,0,.07), 0 1px 2px rgba(0,0,0,.05);
   --shadow-md: 0 4px 16px rgba(0,0,0,.10);
   --r: 12px;
@@ -68,7 +70,7 @@ header h1 { font-size: 15px; font-weight: 700; letter-spacing: -.3px; }
 .month-total { font-size: 14px; font-weight: 700; color: var(--accent); }
 
 /* ── SUMMARY ── */
-.summary-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 16px; }
+.summary-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-bottom: 16px; }
 
 /* CALENDAR */
 .calendar-card { background: white; border: 1px solid var(--border); border-radius: var(--r); padding: 14px 16px; margin-bottom: 16px; box-shadow: var(--shadow); }
@@ -86,6 +88,7 @@ header h1 { font-size: 15px; font-weight: 700; letter-spacing: -.3px; }
 .summary-card .val { font-size: 20px; font-weight: 800; letter-spacing: -.5px; }
 .sc-km .val { color: var(--km); }
 .sc-other .val { color: var(--accent); }
+.sc-zk .val { color: var(--zk); }
 
 /* ── FORM CARD ── */
 .form-card { background: white; border: 1px solid var(--border); border-radius: var(--r); padding: 18px; margin-bottom: 16px; box-shadow: var(--shadow); }
@@ -180,6 +183,7 @@ textarea { resize: vertical; min-height: 58px; }
 .badge-km { background: var(--km-light); }
 .badge-ww { background: var(--ww-light); }
 .badge-other { background: var(--accent-light); }
+.badge-zk { background: var(--zk-light); }
 .entry-info { min-width: 0; }
 .entry-title { font-weight: 700; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .entry-route { font-size: 12px; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -188,11 +192,13 @@ textarea { resize: vertical; min-height: 58px; }
 .tag-km { background: var(--km-light); color: var(--km); }
 .tag-ww { background: var(--ww-light); color: var(--ww); }
 .tag-other { background: var(--accent-light); color: var(--accent); }
+.tag-zk { background: var(--zk-light); color: var(--zk); }
 .entry-right { text-align: right; flex-shrink: 0; }
 .entry-amount { font-size: 15px; font-weight: 800; letter-spacing: -.3px; }
 .amount-km { color: var(--km); }
 .amount-ww { color: var(--ww); }
 .amount-other { color: var(--accent); }
+.amount-zk { color: var(--zk); }
 .entry-actions { display: flex; gap: 3px; justify-content: flex-end; margin-top: 5px; }
 .entry-photos { padding: 0 15px 12px; display: flex; gap: 7px; flex-wrap: wrap; }
 .entry-del { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 15px; padding: 5px 7px; border-radius: var(--r-sm); transition: all .15s; }
@@ -239,7 +245,6 @@ textarea { resize: vertical; min-height: 58px; }
 /* RESPONSIVE */
 @media (max-width: 580px) {
   .summary-grid { grid-template-columns: 1fr 1fr; }
-  .summary-grid .summary-card:last-child { grid-column: 1/-1; }
   .form-grid { grid-template-columns: 1fr; }
   .form-grid .fg.full { grid-column: auto; }
   #monthLabel { min-width: 130px; font-size: 14px; }
@@ -305,6 +310,10 @@ textarea { resize: vertical; min-height: 58px; }
       <div class="lbl" data-i18n="otherExpenses">🧾 Overige kosten</div>
       <div class="val" id="sumOther">€0,00</div>
     </div>
+    <div class="summary-card sc-zk">
+      <div class="lbl" data-i18n="businessExpenses">💳 Zakelijk (kaart)</div>
+      <div class="val" id="sumZk">€0,00</div>
+    </div>
     <div class="summary-card">
       <div class="lbl" data-i18n="total">💰 Totaal</div>
       <div class="val" id="sumTotal">€0,00</div>
@@ -324,6 +333,7 @@ textarea { resize: vertical; min-height: 58px; }
     <div class="form-tabs">
       <button class="tab-btn active" id="tabKm" onclick="switchTab('km')" data-i18n="kilometers">🚗 Kilometers</button>
       <button class="tab-btn" id="tabOther" onclick="switchTab('other')" data-i18n="costs">🧾 Kosten</button>
+      <button class="tab-btn" id="tabBusiness" onclick="switchTab('business')" data-i18n="business">💳 Zakelijk</button>
     </div>
 
     <!-- KM FORM -->
@@ -453,6 +463,82 @@ textarea { resize: vertical; min-height: 58px; }
       </div>
     </div>
 
+    <!-- BUSINESS (ZAKELIJKE CREDITCARD) FORM -->
+    <div id="formBusiness" style="display:none">
+      <p style="font-size:11px;color:var(--muted);margin-bottom:11px;line-height:1.5" data-i18n="businessHint">💳 Kosten betaald met de zakelijke creditcard. Deze tellen niet mee in je persoonlijke totaal, maar worden wel meegenomen in de Excel-export met bonnetjes.</p>
+      <div class="form-grid">
+        <div class="fg">
+          <label data-i18n="date">Datum</label>
+          <input type="date" id="businessDate">
+        </div>
+        <div class="fg">
+          <label data-i18n="expenseType">Type declaratie</label>
+          <select id="businessType">
+            <option value="" data-i18n="select">Selecteer...</option>
+            <option>🍽 Lunch / Diner</option>
+            <option>☕ Koffie / Dranken</option>
+            <option>🚂 OV / Trein</option>
+            <option>🅿 Parkeren</option>
+            <option>🏨 Overnachting</option>
+            <option>✈️ Vliegticket</option>
+            <option>📦 Kantoormateriaal</option>
+            <option>💻 Software / Abonnement</option>
+            <option>📱 Telefoon</option>
+            <option>🎓 Training / Cursus</option>
+            <option>🎁 Relatiegeschenk</option>
+            <option>🔧 Overig</option>
+          </select>
+        </div>
+        <div class="fg full">
+          <label data-i18n="description">Omschrijving</label>
+          <input type="text" id="businessDesc" placeholder="bijv. Hotel Singapore 3 nachten">
+        </div>
+        <div class="fg">
+          <label data-i18n="currency">Voluta</label>
+          <select id="businessCurrency" onchange="onCurrencyChange('business')">
+            <option value="EUR" selected>€ EUR</option>
+            <option value="USD">$ USD</option>
+            <option value="GBP">£ GBP</option>
+            <option value="CHF">CHF</option>
+            <option value="JPY">¥ JPY</option>
+            <option value="CNY">¥ CNY</option>
+            <option value="SEK">SEK</option>
+            <option value="NOK">NOK</option>
+            <option value="DKK">DKK</option>
+            <option value="PLN">PLN</option>
+            <option value="CZK">CZK</option>
+            <option value="HUF">HUF</option>
+            <option value="HKD">HKD</option>
+            <option value="SGD">SGD</option>
+            <option value="AUD">AUD</option>
+            <option value="CAD">CAD</option>
+            <option value="OTHER" data-i18n="other">Andere...</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label id="businessAmountLabel">Bedrag (€)</label>
+          <input type="number" id="businessAmount" placeholder="0,00" min="0" step="0.01">
+        </div>
+        <div class="fg full" id="businessEurAmountRow" style="display:none">
+          <label data-i18n="eurAmountLabel">Bedrag in € (zoals afgeschreven door de bank)</label>
+          <input type="number" id="businessEurAmount" placeholder="0,00" min="0" step="0.01">
+        </div>
+        <div class="fg full" id="businessCurrencyOtherRow" style="display:none">
+          <label data-i18n="otherCurrencyLabel">Voluta (anders)</label>
+          <input type="text" id="businessCurrencyOther" placeholder="bijv. THB, MAD, ...">
+        </div>
+        <div class="fg full" style="margin-bottom:0">
+          <label data-i18n="photoReceipt">Foto (bonnetje)</label>
+          <div class="photo-upload">
+            <input type="file" accept="image/*" multiple onchange="handlePhotos(event,'business')">
+            <div class="pu-icon">📷</div>
+            <div class="pu-hint">Klik of sleep foto's hiernaartoe</div>
+          </div>
+          <div class="photo-preview" id="businessPhotoPreview"></div>
+        </div>
+      </div>
+    </div>
+
     <div class="form-footer">
       <button class="btn btn-secondary" onclick="resetForm()" data-i18n="clear">Wissen</button>
       <button class="btn btn-primary" id="addBtn" onclick="addEntry()" data-i18n="add">Toevoegen</button>
@@ -572,6 +658,9 @@ const TRANSLATIONS = {
     addExpense: '➕ Declaratie toevoegen',
     kilometers: 'Kilometers',
     costs: '🧾 Kosten',
+    business: '💳 Zakelijk',
+    businessExpenses: '💳 Zakelijk (kaart)',
+    businessHint: '💳 Kosten betaald met de zakelijke creditcard. Deze tellen niet mee in je persoonlijke totaal, maar worden wel meegenomen in de Excel-export met bonnetjes.',
     date: 'Datum',
     commute: 'Woon-werk',
     commuteAutoFill: 'Automatisch',
@@ -661,6 +750,9 @@ const TRANSLATIONS = {
     addExpense: '➕ Add expense',
     kilometers: 'Kilometers',
     costs: '🧾 Expenses',
+    business: '💳 Business card',
+    businessExpenses: '💳 Business card',
+    businessHint: '💳 Expenses paid with the business credit card. These are not included in your personal total, but are included in the Excel export together with the receipts.',
     date: 'Date',
     commute: 'Home-Office commute',
     commuteAutoFill: 'Auto-fill',
@@ -755,14 +847,16 @@ function applyTranslations() {
     if (val && typeof val === 'string') el.textContent = val;
   });
   // Update select options for expense type
-  const sel = document.getElementById('otherType');
-  if (sel) {
-    const opts = TRANSLATIONS[currentLang].expenseTypeOptions;
-    [...sel.options].forEach((opt, i) => {
-      if (i === 0) { opt.textContent = t('select'); return; }
-      if (opts[i-1]) opt.textContent = opts[i-1];
-    });
-  }
+  ['otherType','businessType'].forEach(selId => {
+    const sel = document.getElementById(selId);
+    if (sel) {
+      const opts = TRANSLATIONS[currentLang].expenseTypeOptions;
+      [...sel.options].forEach((opt, i) => {
+        if (i === 0) { opt.textContent = t('select'); return; }
+        if (opts[i-1]) opt.textContent = opts[i-1];
+      });
+    }
+  });
   // Update photo hints
   document.querySelectorAll('.pu-hint').forEach(el => el.textContent = t('photoHint'));
   // Update placeholder
@@ -849,7 +943,7 @@ let allEntries = [];
 let currentYear = new Date().getFullYear();
 let currentMonth = new Date().getMonth();
 let currentTab = 'km', wwActive = false;
-let pendingKm = [], pendingOther = [];
+let pendingKm = [], pendingOther = [], pendingBusiness = [];
 let deleteId = null, exportScope = 'current', stopCount = 0;
 
 const FIREBASE_CONFIG = {
@@ -1042,9 +1136,11 @@ function updateMonthUI() {
   const entries = getMonthEntries();
   const kmTotal = entries.filter(e => e.kmType === 'km' || e.kmType === 'ww').reduce((s,e) => s + e.km * KM_RATE, 0);
   const otherTotal = entries.filter(e => e.type === 'other').reduce((s,e) => s + getEurAmount(e), 0);
+  const zkTotal = entries.filter(e => e.type === 'business').reduce((s,e) => s + getEurAmount(e), 0);
   const total = kmTotal + otherTotal;
   document.getElementById('sumKm').textContent = formatEur(kmTotal);
   document.getElementById('sumOther').textContent = formatEur(otherTotal);
+  document.getElementById('sumZk').textContent = formatEur(zkTotal);
   document.getElementById('sumTotal').textContent = formatEur(total);
   document.getElementById('monthTotalLabel').textContent = formatEur(total);
   document.getElementById('entriesTitle').textContent = t('entriesTitle', MONTHS()[currentMonth], currentYear);
@@ -1125,8 +1221,10 @@ function switchTab(tab) {
   currentTab = tab;
   document.getElementById('formKm').style.display = tab === 'km' ? 'block' : 'none';
   document.getElementById('formOther').style.display = tab === 'other' ? 'block' : 'none';
+  document.getElementById('formBusiness').style.display = tab === 'business' ? 'block' : 'none';
   document.getElementById('tabKm').classList.toggle('active', tab === 'km');
   document.getElementById('tabOther').classList.toggle('active', tab === 'other');
+  document.getElementById('tabBusiness').classList.toggle('active', tab === 'business');
 }
 window.switchTab = switchTab;
 
@@ -1170,11 +1268,12 @@ function getRouteString() {
 
 const CURRENCY_SYMBOLS = { EUR:'€', USD:'$', GBP:'£', CHF:'CHF', JPY:'¥', CNY:'¥', SEK:'SEK', NOK:'NOK', DKK:'DKK', PLN:'PLN', CZK:'CZK', HUF:'HUF', HKD:'HKD', SGD:'SGD', AUD:'AUD', CAD:'CAD' };
 
-function onCurrencyChange() {
-  const sel = document.getElementById('otherCurrency').value;
-  const otherRow = document.getElementById('otherCurrencyOtherRow');
-  const eurRow = document.getElementById('eurAmountRow');
-  const label = document.getElementById('otherAmountLabel');
+function onCurrencyChange(form) {
+  const prefix = form === 'business' ? 'business' : 'other';
+  const sel = document.getElementById(prefix + 'Currency').value;
+  const otherRow = document.getElementById(prefix + 'CurrencyOtherRow');
+  const eurRow = document.getElementById(prefix === 'business' ? 'businessEurAmountRow' : 'eurAmountRow');
+  const label = document.getElementById(prefix + 'AmountLabel');
   otherRow.style.display = sel === 'OTHER' ? 'block' : 'none';
   if (sel === 'EUR') {
     eurRow.style.display = 'none';
@@ -1196,10 +1295,11 @@ function onKmChange() {
 }
 window.onKmChange = onKmChange;
 
+function getPendingArr(form) { return form === 'km' ? pendingKm : (form === 'business' ? pendingBusiness : pendingOther); }
 function handlePhotos(event, form) {
   const files = Array.from(event.target.files);
-  const arr = form === 'km' ? pendingKm : pendingOther;
-  const preview = document.getElementById(form === 'km' ? 'kmPhotoPreview' : 'otherPhotoPreview');
+  const arr = getPendingArr(form);
+  const preview = document.getElementById(form === 'km' ? 'kmPhotoPreview' : (form === 'business' ? 'businessPhotoPreview' : 'otherPhotoPreview'));
   files.forEach(file => {
     const reader = new FileReader();
     reader.onload = e => {
@@ -1215,7 +1315,7 @@ function handlePhotos(event, form) {
 }
 window.handlePhotos = handlePhotos;
 function removePhoto(btn, form, idx) {
-  (form === 'km' ? pendingKm : pendingOther)[idx] = null;
+  getPendingArr(form)[idx] = null;
   btn.parentElement.remove();
 }
 window.removePhoto = removePhoto;
@@ -1234,6 +1334,24 @@ async function addEntry() {
       await addDoc(collection(db, 'declaraties'), {
         type: 'km', kmType: wwActive ? 'ww' : 'km', date, km, route,
         photos: pendingKm.filter(Boolean), uid: currentUser.uid, createdAt: Date.now()
+      });
+    } else if (currentTab === 'business') {
+      const date = document.getElementById('businessDate').value;
+      const type = document.getElementById('businessType').value;
+      const desc = document.getElementById('businessDesc').value.trim();
+      const amount = parseFloat(document.getElementById('businessAmount').value);
+      const currencySel = document.getElementById('businessCurrency').value;
+      const currency = currencySel === 'OTHER' ? (document.getElementById('businessCurrencyOther').value.trim().toUpperCase() || 'OTHER') : currencySel;
+      const eurAmountRaw = document.getElementById('businessEurAmount').value;
+      const eurAmount = eurAmountRaw ? parseFloat(eurAmountRaw) : null;
+      if (!date) { toast('Vul een datum in'); btn.disabled = false; return; }
+      if (!type) { toast(t('toastSelectType')); btn.disabled = false; return; }
+      if (!amount || amount<=0){ toast(t('toastFillAmount')); btn.disabled = false; return; }
+      if (currency !== 'EUR' && (!eurAmount || eurAmount<=0)) { toast(t('toastFillEur')); btn.disabled = false; return; }
+      await addDoc(collection(db, 'declaraties'), {
+        type: 'business', declType: type, desc, date, amount, currency,
+        eurAmount: currency === 'EUR' ? null : eurAmount,
+        photos: pendingBusiness.filter(Boolean), uid: currentUser.uid, createdAt: Date.now()
       });
     } else {
       const date = document.getElementById('otherDate').value;
@@ -1254,7 +1372,7 @@ async function addEntry() {
         photos: pendingOther.filter(Boolean), uid: currentUser.uid, createdAt: Date.now()
       });
     }
-    const savedDate = currentTab === 'km' ? document.getElementById('kmDate').value : document.getElementById('otherDate').value;
+    const savedDate = currentTab === 'km' ? document.getElementById('kmDate').value : (currentTab === 'business' ? document.getElementById('businessDate').value : document.getElementById('otherDate').value);
     resetForm();
     const sd = new Date(savedDate);
     if (sd.getFullYear() !== currentYear || sd.getMonth() !== currentMonth) {
@@ -1274,19 +1392,26 @@ function resetForm() {
   document.getElementById('wwToggle').classList.remove('active');
   document.getElementById('kmKm').readOnly = false;
   document.getElementById('routeSection').style.display = 'block';
-  ['kmKm','otherDesc','otherAmount','otherEurAmount','otherCurrencyOther'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  ['kmKm','otherDesc','otherAmount','otherEurAmount','otherCurrencyOther','businessDesc','businessAmount','businessEurAmount','businessCurrencyOther'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
   document.getElementById('otherType').value = '';
   document.getElementById('otherCurrency').value = 'EUR';
   document.getElementById('eurAmountRow').style.display = 'none';
   document.getElementById('otherCurrencyOtherRow').style.display = 'none';
   document.getElementById('otherAmountLabel').textContent = t('otherAmountLabel');
+  document.getElementById('businessType').value = '';
+  document.getElementById('businessCurrency').value = 'EUR';
+  document.getElementById('businessEurAmountRow').style.display = 'none';
+  document.getElementById('businessCurrencyOtherRow').style.display = 'none';
+  document.getElementById('businessAmountLabel').textContent = t('otherAmountLabel');
   document.getElementById('kmPreview').classList.remove('visible');
-  pendingKm = []; pendingOther = [];
+  pendingKm = []; pendingOther = []; pendingBusiness = [];
   document.getElementById('kmPhotoPreview').innerHTML = '';
   document.getElementById('otherPhotoPreview').innerHTML = '';
+  document.getElementById('businessPhotoPreview').innerHTML = '';
   const today = new Date().toISOString().slice(0,10);
   if (!document.getElementById('kmDate').value) document.getElementById('kmDate').value = today;
   if (!document.getElementById('otherDate').value) document.getElementById('otherDate').value = today;
+  if (!document.getElementById('businessDate').value) document.getElementById('businessDate').value = today;
   initStops();
 }
 window.resetForm = resetForm;
@@ -1298,15 +1423,15 @@ function renderEntries(entries) {
     return;
   }
   list.innerHTML = entries.map(e => {
-    const isKm = e.type === 'km', isWW = e.kmType === 'ww';
+    const isKm = e.type === 'km', isWW = e.kmType === 'ww', isBiz = e.type === 'business';
     const isForeign = !isKm && e.currency && e.currency !== 'EUR';
     const amount = isKm ? e.km * KM_RATE : getEurAmount(e);
     const photos = e.photos || [];
-    const badgeClass = isWW ? 'badge-ww' : (isKm ? 'badge-km' : 'badge-other');
-    const emoji = isWW ? '🏠' : (isKm ? '🚗' : getTypeEmoji(e.declType));
-    const amtClass = isWW ? 'amount-ww' : (isKm ? 'amount-km' : 'amount-other');
-    const tagClass = isWW ? 'tag-ww' : (isKm ? 'tag-km' : 'tag-other');
-    const tagText = isWW ? t('commute') : (isKm ? `${e.km} km` : (e.declType||''));
+    const badgeClass = isWW ? 'badge-ww' : (isKm ? 'badge-km' : (isBiz ? 'badge-zk' : 'badge-other'));
+    const emoji = isWW ? '🏠' : (isKm ? '🚗' : (isBiz ? '💳' : getTypeEmoji(e.declType)));
+    const amtClass = isWW ? 'amount-ww' : (isKm ? 'amount-km' : (isBiz ? 'amount-zk' : 'amount-other'));
+    const tagClass = isWW ? 'tag-ww' : (isKm ? 'tag-km' : (isBiz ? 'tag-zk' : 'tag-other'));
+    const tagText = isWW ? t('commute') : (isKm ? `${e.km} km` : (isBiz ? t('business') : (e.declType||'')));
     const title = isWW ? t('commute') : (isKm ? (e.route||t('kilometers')) : (e.desc||e.declType||t('appTitle')));
     const subtitle = isKm && !isWW && e.route ? e.route : '';
     const origAmountTxt = isForeign ? `${(CURRENCY_SYMBOLS[e.currency]||e.currency)} ${e.amount.toFixed(2).replace('.',',')}` : '';
@@ -1387,7 +1512,7 @@ function getDescriptionEN(entry) {
 }
 
 async function generateTravelExpense() {
-  const data = getMonthEntries();
+  const data = getMonthEntries().filter(e => e.type !== 'business');
   if (data.length === 0) { toast(t('toastNoEntries')); return; }
   toast(t('toastGenerating'));
   setLoading(true);
@@ -1791,9 +1916,11 @@ async function buildExcelWithPhotos(data, filename) {
   const wwEntries = data.filter(e => e.type === 'km' && e.kmType === 'ww');
   const kmEntries = data.filter(e => e.type === 'km' && e.kmType !== 'ww');
   const otherEntries = data.filter(e => e.type === 'other');
+  const businessEntries = data.filter(e => e.type === 'business');
   const wwKmTotal = wwEntries.reduce((s,e) => s + e.km * KM_RATE, 0);
   const kmTotal = kmEntries.reduce((s,e) => s + e.km * KM_RATE, 0);
   const otherTotal = otherEntries.reduce((s,e) => s + getEurAmount(e), 0);
+  const businessTotal = businessEntries.reduce((s,e) => s + getEurAmount(e), 0);
   const grandTotal = wwKmTotal + kmTotal + otherTotal;
   const sheetRows = [];
   sheetRows.push([`🏠 WOON-WERK KILOMETERS`]);
@@ -1814,10 +1941,17 @@ async function buildExcelWithPhotos(data, filename) {
   else otherEntries.forEach(e => sheetRows.push([formatDate(e.date),e.declType||'Overig',e.desc||'',e.currency||'EUR',parseFloat(e.amount.toFixed(2)),parseFloat(getEurAmount(e).toFixed(2)),(e.photos||[]).length>0?`${(e.photos||[]).length} foto('s) → zie Bonnetjes`:'-']));
   sheetRows.push(['','','','','', parseFloat(otherTotal.toFixed(2)), `Subtotaal overige kosten`]);
   sheetRows.push([]);
+  sheetRows.push([`💳 ZAKELIJKE KOSTEN (creditcard)`]);
+  sheetRows.push(['Datum','Type','Omschrijving','Voluta','Bedrag (voluta)','Bedrag (€)','Bonnetjes']);
+  if (businessEntries.length === 0) sheetRows.push(['Geen zakelijke kosten in deze periode','','','','','','']);
+  else businessEntries.forEach(e => sheetRows.push([formatDate(e.date),e.declType||'Overig',e.desc||'',e.currency||'EUR',parseFloat(e.amount.toFixed(2)),parseFloat(getEurAmount(e).toFixed(2)),(e.photos||[]).length>0?`${(e.photos||[]).length} foto('s) → zie Bonnetjes`:'-']));
+  sheetRows.push(['','','','','', parseFloat(businessTotal.toFixed(2)), `Subtotaal zakelijke kosten`]);
+  sheetRows.push([]);
   sheetRows.push(['TOTAAL WOON-WERK KM', '', '', wwEntries.reduce((s,e)=>s+e.km,0), '', parseFloat(wwKmTotal.toFixed(2)), '']);
   sheetRows.push(['TOTAAL OVERIGE KM', '', '', kmEntries.reduce((s,e)=>s+e.km,0), '', parseFloat(kmTotal.toFixed(2)), '']);
   sheetRows.push(['TOTAAL OVERIGE KOSTEN', '', '', '', '', parseFloat(otherTotal.toFixed(2)), '']);
-  sheetRows.push(['TOTAAL ALLES', '', '', '', '', parseFloat(grandTotal.toFixed(2)), '']);
+  sheetRows.push(['TOTAAL TE VERGOEDEN (excl. zakelijke kaart)', '', '', '', '', parseFloat(grandTotal.toFixed(2)), '']);
+  sheetRows.push(['TOTAAL ZAKELIJKE KOSTEN (creditcard, niet te vergoeden)', '', '', '', '', parseFloat(businessTotal.toFixed(2)), '']);
   const ws1 = XLSX.utils.aoa_to_sheet(sheetRows);
   ws1['!cols'] = [14,18,36,12,14,14,24].map(w=>({wch:w}));
 
