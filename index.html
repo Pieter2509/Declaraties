@@ -1893,22 +1893,28 @@ function buildReceiptDrawingRels(photos) {
 }
 
 async function doExport() {
-  let data = [...allEntries];
-  let filename = 'declaraties';
-  if (exportScope === 'current') {
-    data = data.filter(e => { const d=new Date(e.date); return d.getFullYear()===currentYear && d.getMonth()===currentMonth; });
-    filename = `declaraties_${MONTHS[currentMonth].toLowerCase()}_${currentYear}`;
-  } else if (exportScope === 'year') {
-    data = data.filter(e => new Date(e.date).getFullYear()===currentYear);
-    filename = `declaraties_${currentYear}`;
+  try {
+    let data = [...allEntries];
+    let filename = 'declaraties';
+    if (exportScope === 'current') {
+      data = data.filter(e => { const d=new Date(e.date); return d.getFullYear()===currentYear && d.getMonth()===currentMonth; });
+      filename = `declaraties_${MONTHS()[currentMonth].toLowerCase()}_${currentYear}`;
+    } else if (exportScope === 'year') {
+      data = data.filter(e => new Date(e.date).getFullYear()===currentYear);
+      filename = `declaraties_${currentYear}`;
+    }
+    data.sort((a,b) => new Date(a.date)-new Date(b.date));
+    closeModal('exportModal');
+    toast(t('toastExporting'));
+    setLoading(true);
+    try { await buildExcelWithPhotos(data, filename); toast(t('toastExportDone')); }
+    catch(e) { console.error(e); toast(t('toastExportFailed')); }
+    setLoading(false);
+  } catch(e) {
+    console.error(e);
+    toast(t('toastExportFailed'));
+    setLoading(false);
   }
-  data.sort((a,b) => new Date(a.date)-new Date(b.date));
-  closeModal('exportModal');
-  toast(t('toastExporting'));
-  setLoading(true);
-  try { await buildExcelWithPhotos(data, filename); toast(t('toastExportDone')); }
-  catch(e) { console.error(e); toast(t('toastExportFailed')); }
-  setLoading(false);
 }
 window.doExport = doExport;
 
