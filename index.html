@@ -281,7 +281,8 @@ textarea { resize: vertical; min-height: 58px; }
   </div>
   <div class="header-right">
     <button class="btn btn-secondary btn-sm" id="langToggle" onclick="toggleLang()" style="font-size:11px;font-weight:700;min-width:36px">NL</button>
-    <button class="btn btn-secondary btn-sm" onclick="openExportModal()">⬇ <span data-i18n="export">Export</span></button>
+    <button class="btn btn-secondary btn-sm" onclick="openExportModal('personal')">⬇ <span data-i18n="export">Export</span></button>
+    <button class="btn btn-secondary btn-sm" onclick="openExportModal('business')" style="color:var(--zk);border-color:var(--zk)">💳 <span data-i18n="exportBusiness">Zakelijk Excel</span></button>
     <button class="btn btn-secondary btn-sm" onclick="generateTravelExpense()" style="color:var(--success);border-color:var(--success)">✈️ <span data-i18n="travelReport">Travel Report</span></button>
     <button class="btn btn-secondary btn-sm btn-icon" onclick="openSettings()">⚙️</button>
     <img id="userAvatar" style="width:30px;height:30px;border-radius:50%;object-fit:cover;border:2px solid var(--border);cursor:pointer;display:none;" onclick="logout()">
@@ -560,11 +561,11 @@ textarea { resize: vertical; min-height: 58px; }
 <div class="modal-overlay" id="exportModal">
   <div class="modal">
     <div class="modal-header">
-      <h3 data-i18n="exportTitle">⬇ Export naar Excel</h3>
+      <h3 id="exportModalTitle">⬇ Export naar Excel</h3>
       <button class="modal-close" onclick="closeModal('exportModal')">✕</button>
     </div>
     <div class="modal-body">
-      <p style="color:var(--muted);margin-bottom:14px;font-size:12px">Kies welke periode je wil exporteren:</p>
+      <p style="color:var(--muted);margin-bottom:14px;font-size:12px" id="exportModalSubtitle">Kies welke periode je wil exporteren:</p>
       <div class="export-options">
         <div class="export-option selected" id="expCurrent" onclick="selectExport('current')">
           <div class="eo-icon">📅</div>
@@ -650,6 +651,7 @@ const TRANSLATIONS = {
     loginSubtitle: 'Log in met je Google-account om je declaraties te beheren.',
     loginBtn: 'Inloggen met Google',
     export: 'Export',
+    exportBusiness: 'Zakelijk Excel',
     travelReport: 'Travel Report',
     kmReimbursement: '🚗 Km vergoeding',
     otherExpenses: '🧾 Overige kosten',
@@ -678,6 +680,9 @@ const TRANSLATIONS = {
     clear: 'Wissen',
     add: 'Toevoegen',
     exportTitle: '⬇ Export naar Excel',
+    exportTitleBusiness: '💳 Export zakelijke kosten',
+    exportSubtitlePersonal: 'Kies welke periode je wil exporteren. Zakelijke creditcard-kosten zitten hier niet bij — gebruik daarvoor de knop "Zakelijk Excel".',
+    exportSubtitleBusiness: 'Kies welke periode je wil exporteren. Dit bestand bevat alleen je zakelijke creditcard-kosten met bonnetjes, gescheiden van je persoonlijke declaraties.',
     cancel: 'Annuleren',
     downloadExcel: '⬇ Download Excel',
     settings: '⚙️ Instellingen',
@@ -742,6 +747,7 @@ const TRANSLATIONS = {
     loginSubtitle: 'Sign in with your Google account to manage your expenses.',
     loginBtn: 'Sign in with Google',
     export: 'Export',
+    exportBusiness: 'Business Excel',
     travelReport: 'Travel Report',
     kmReimbursement: '🚗 Mileage reimbursement',
     otherExpenses: '🧾 Other expenses',
@@ -770,6 +776,9 @@ const TRANSLATIONS = {
     clear: 'Clear',
     add: 'Add',
     exportTitle: '⬇ Export to Excel',
+    exportTitleBusiness: '💳 Export business expenses',
+    exportSubtitlePersonal: 'Choose which period to export. Business credit card expenses are not included here — use the "Business Excel" button for those.',
+    exportSubtitleBusiness: 'Choose which period to export. This file only contains your business credit card expenses with receipts, kept separate from your personal expenses.',
     cancel: 'Cancel',
     downloadExcel: '⬇ Download Excel',
     settings: '⚙️ Settings',
@@ -862,6 +871,11 @@ function applyTranslations() {
   // Update placeholder
   const descInput = document.getElementById('otherDesc');
   if (descInput) descInput.placeholder = t('descPlaceholder');
+  // Update export modal title/subtitle (depends on which export type is selected)
+  const exportTitleEl = document.getElementById('exportModalTitle');
+  if (exportTitleEl) exportTitleEl.textContent = window.currentExportType === 'business' ? t('exportTitleBusiness') : t('exportTitle');
+  const exportSubtitleEl = document.getElementById('exportModalSubtitle');
+  if (exportSubtitleEl) exportSubtitleEl.textContent = window.currentExportType === 'business' ? t('exportSubtitleBusiness') : t('exportSubtitlePersonal');
   // Update ww sub text
   const wwSub = document.getElementById('wwSub');
   if (wwSub) wwSub.innerHTML = `${t('commuteAutoText')} <span id="wwKmLabel">${getWwKm()*2}</span> km invullen`;
@@ -944,7 +958,8 @@ let currentYear = new Date().getFullYear();
 let currentMonth = new Date().getMonth();
 let currentTab = 'km', wwActive = false;
 let pendingKm = [], pendingOther = [], pendingBusiness = [];
-let deleteId = null, exportScope = 'current', stopCount = 0;
+let deleteId = null, exportScope = 'current', currentExportType = 'personal', stopCount = 0;
+window.currentExportType = currentExportType;
 
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyBuBCK6q4IixYA97d84dL3F6Nl7uT-l5XM",
@@ -1470,7 +1485,14 @@ async function confirmDelete() {
 }
 window.confirmDelete = confirmDelete;
 
-function openExportModal() { document.getElementById('exportModal').classList.add('open'); }
+function openExportModal(type) {
+  currentExportType = type === 'business' ? 'business' : 'personal';
+  window.currentExportType = currentExportType;
+  const isBusiness = currentExportType === 'business';
+  document.getElementById('exportModalTitle').textContent = isBusiness ? t('exportTitleBusiness') : t('exportTitle');
+  document.getElementById('exportModalSubtitle').textContent = isBusiness ? t('exportSubtitleBusiness') : t('exportSubtitlePersonal');
+  document.getElementById('exportModal').classList.add('open');
+}
 window.openExportModal = openExportModal;
 function selectExport(scope) {
   exportScope = scope;
@@ -1894,20 +1916,22 @@ function buildReceiptDrawingRels(photos) {
 
 async function doExport() {
   try {
-    let data = [...allEntries];
-    let filename = 'declaraties';
+    const isBusiness = currentExportType === 'business';
+    let data = isBusiness ? allEntries.filter(e => e.type === 'business') : allEntries.filter(e => e.type !== 'business');
+    const namePrefix = isBusiness ? 'zakelijke_declaraties' : 'declaraties';
+    let filename = namePrefix;
     if (exportScope === 'current') {
       data = data.filter(e => { const d=new Date(e.date); return d.getFullYear()===currentYear && d.getMonth()===currentMonth; });
-      filename = `declaraties_${MONTHS()[currentMonth].toLowerCase()}_${currentYear}`;
+      filename = `${namePrefix}_${MONTHS()[currentMonth].toLowerCase()}_${currentYear}`;
     } else if (exportScope === 'year') {
       data = data.filter(e => new Date(e.date).getFullYear()===currentYear);
-      filename = `declaraties_${currentYear}`;
+      filename = `${namePrefix}_${currentYear}`;
     }
     data.sort((a,b) => new Date(a.date)-new Date(b.date));
     closeModal('exportModal');
     toast(t('toastExporting'));
     setLoading(true);
-    try { await buildExcelWithPhotos(data, filename); toast(t('toastExportDone')); }
+    try { await buildExcelWithPhotos(data, filename, currentExportType); toast(t('toastExportDone')); }
     catch(e) { console.error(e); toast(t('toastExportFailed')); }
     setLoading(false);
   } catch(e) {
@@ -1918,46 +1942,51 @@ async function doExport() {
 }
 window.doExport = doExport;
 
-async function buildExcelWithPhotos(data, filename) {
-  const wwEntries = data.filter(e => e.type === 'km' && e.kmType === 'ww');
-  const kmEntries = data.filter(e => e.type === 'km' && e.kmType !== 'ww');
-  const otherEntries = data.filter(e => e.type === 'other');
-  const businessEntries = data.filter(e => e.type === 'business');
-  const wwKmTotal = wwEntries.reduce((s,e) => s + e.km * KM_RATE, 0);
-  const kmTotal = kmEntries.reduce((s,e) => s + e.km * KM_RATE, 0);
-  const otherTotal = otherEntries.reduce((s,e) => s + getEurAmount(e), 0);
-  const businessTotal = businessEntries.reduce((s,e) => s + getEurAmount(e), 0);
-  const grandTotal = wwKmTotal + kmTotal + otherTotal;
+async function buildExcelWithPhotos(data, filename, exportType) {
+  const isBusiness = exportType === 'business';
   const sheetRows = [];
-  sheetRows.push([`🏠 WOON-WERK KILOMETERS`]);
-  sheetRows.push(['Datum','Type','Route','Kilometers','Tarief (€/km)','Bedrag (€)','Bonnetjes']);
-  if (wwEntries.length === 0) sheetRows.push(['Geen woon-werk ritten in deze periode','','','','','','']);
-  else wwEntries.forEach(e => sheetRows.push([formatDate(e.date),'Woon-werk','Woon-werk',e.km,KM_RATE,parseFloat((e.km*KM_RATE).toFixed(2)),(e.photos||[]).length>0?`${(e.photos||[]).length} foto('s) → zie Bonnetjes`:'-']));
-  sheetRows.push(['','','', wwEntries.reduce((s,e)=>s+e.km,0), '', parseFloat(wwKmTotal.toFixed(2)), `Subtotaal woon-werk`]);
-  sheetRows.push([]);
-  sheetRows.push([`🚗 OVERIGE KILOMETERS`]);
-  sheetRows.push(['Datum','Type','Route','Kilometers','Tarief (€/km)','Bedrag (€)','Bonnetjes']);
-  if (kmEntries.length === 0) sheetRows.push(['Geen overige ritten in deze periode','','','','','','']);
-  else kmEntries.forEach(e => sheetRows.push([formatDate(e.date),'Kilometers',e.route||'',e.km,KM_RATE,parseFloat((e.km*KM_RATE).toFixed(2)),(e.photos||[]).length>0?`${(e.photos||[]).length} foto('s) → zie Bonnetjes`:'-']));
-  sheetRows.push(['','','', kmEntries.reduce((s,e)=>s+e.km,0), '', parseFloat(kmTotal.toFixed(2)), `Subtotaal overige km`]);
-  sheetRows.push([]);
-  sheetRows.push([`🧾 OVERIGE KOSTEN`]);
-  sheetRows.push(['Datum','Type','Omschrijving','Voluta','Bedrag (voluta)','Bedrag (€)','Bonnetjes']);
-  if (otherEntries.length === 0) sheetRows.push(['Geen overige kosten in deze periode','','','','','','']);
-  else otherEntries.forEach(e => sheetRows.push([formatDate(e.date),e.declType||'Overig',e.desc||'',e.currency||'EUR',parseFloat(e.amount.toFixed(2)),parseFloat(getEurAmount(e).toFixed(2)),(e.photos||[]).length>0?`${(e.photos||[]).length} foto('s) → zie Bonnetjes`:'-']));
-  sheetRows.push(['','','','','', parseFloat(otherTotal.toFixed(2)), `Subtotaal overige kosten`]);
-  sheetRows.push([]);
-  sheetRows.push([`💳 ZAKELIJKE KOSTEN (creditcard)`]);
-  sheetRows.push(['Datum','Type','Omschrijving','Voluta','Bedrag (voluta)','Bedrag (€)','Bonnetjes']);
-  if (businessEntries.length === 0) sheetRows.push(['Geen zakelijke kosten in deze periode','','','','','','']);
-  else businessEntries.forEach(e => sheetRows.push([formatDate(e.date),e.declType||'Overig',e.desc||'',e.currency||'EUR',parseFloat(e.amount.toFixed(2)),parseFloat(getEurAmount(e).toFixed(2)),(e.photos||[]).length>0?`${(e.photos||[]).length} foto('s) → zie Bonnetjes`:'-']));
-  sheetRows.push(['','','','','', parseFloat(businessTotal.toFixed(2)), `Subtotaal zakelijke kosten`]);
-  sheetRows.push([]);
-  sheetRows.push(['TOTAAL WOON-WERK KM', '', '', wwEntries.reduce((s,e)=>s+e.km,0), '', parseFloat(wwKmTotal.toFixed(2)), '']);
-  sheetRows.push(['TOTAAL OVERIGE KM', '', '', kmEntries.reduce((s,e)=>s+e.km,0), '', parseFloat(kmTotal.toFixed(2)), '']);
-  sheetRows.push(['TOTAAL OVERIGE KOSTEN', '', '', '', '', parseFloat(otherTotal.toFixed(2)), '']);
-  sheetRows.push(['TOTAAL TE VERGOEDEN (excl. zakelijke kaart)', '', '', '', '', parseFloat(grandTotal.toFixed(2)), '']);
-  sheetRows.push(['TOTAAL ZAKELIJKE KOSTEN (creditcard, niet te vergoeden)', '', '', '', '', parseFloat(businessTotal.toFixed(2)), '']);
+
+  if (isBusiness) {
+    const businessEntries = data.filter(e => e.type === 'business');
+    const businessTotal = businessEntries.reduce((s,e) => s + getEurAmount(e), 0);
+    sheetRows.push([`💳 ZAKELIJKE KOSTEN (creditcard)`]);
+    sheetRows.push(['Datum','Type','Omschrijving','Voluta','Bedrag (voluta)','Bedrag (€)','Bonnetjes']);
+    if (businessEntries.length === 0) sheetRows.push(['Geen zakelijke kosten in deze periode','','','','','','']);
+    else businessEntries.forEach(e => sheetRows.push([formatDate(e.date),e.declType||'Overig',e.desc||'',e.currency||'EUR',parseFloat(e.amount.toFixed(2)),parseFloat(getEurAmount(e).toFixed(2)),(e.photos||[]).length>0?`${(e.photos||[]).length} foto('s) → zie Bonnetjes`:'-']));
+    sheetRows.push(['','','','','', parseFloat(businessTotal.toFixed(2)), `Subtotaal zakelijke kosten`]);
+    sheetRows.push([]);
+    sheetRows.push(['TOTAAL ZAKELIJKE KOSTEN (creditcard)', '', '', '', '', parseFloat(businessTotal.toFixed(2)), '']);
+  } else {
+    const wwEntries = data.filter(e => e.type === 'km' && e.kmType === 'ww');
+    const kmEntries = data.filter(e => e.type === 'km' && e.kmType !== 'ww');
+    const otherEntries = data.filter(e => e.type === 'other');
+    const wwKmTotal = wwEntries.reduce((s,e) => s + e.km * KM_RATE, 0);
+    const kmTotal = kmEntries.reduce((s,e) => s + e.km * KM_RATE, 0);
+    const otherTotal = otherEntries.reduce((s,e) => s + getEurAmount(e), 0);
+    const grandTotal = wwKmTotal + kmTotal + otherTotal;
+    sheetRows.push([`🏠 WOON-WERK KILOMETERS`]);
+    sheetRows.push(['Datum','Type','Route','Kilometers','Tarief (€/km)','Bedrag (€)','Bonnetjes']);
+    if (wwEntries.length === 0) sheetRows.push(['Geen woon-werk ritten in deze periode','','','','','','']);
+    else wwEntries.forEach(e => sheetRows.push([formatDate(e.date),'Woon-werk','Woon-werk',e.km,KM_RATE,parseFloat((e.km*KM_RATE).toFixed(2)),(e.photos||[]).length>0?`${(e.photos||[]).length} foto('s) → zie Bonnetjes`:'-']));
+    sheetRows.push(['','','', wwEntries.reduce((s,e)=>s+e.km,0), '', parseFloat(wwKmTotal.toFixed(2)), `Subtotaal woon-werk`]);
+    sheetRows.push([]);
+    sheetRows.push([`🚗 OVERIGE KILOMETERS`]);
+    sheetRows.push(['Datum','Type','Route','Kilometers','Tarief (€/km)','Bedrag (€)','Bonnetjes']);
+    if (kmEntries.length === 0) sheetRows.push(['Geen overige ritten in deze periode','','','','','','']);
+    else kmEntries.forEach(e => sheetRows.push([formatDate(e.date),'Kilometers',e.route||'',e.km,KM_RATE,parseFloat((e.km*KM_RATE).toFixed(2)),(e.photos||[]).length>0?`${(e.photos||[]).length} foto('s) → zie Bonnetjes`:'-']));
+    sheetRows.push(['','','', kmEntries.reduce((s,e)=>s+e.km,0), '', parseFloat(kmTotal.toFixed(2)), `Subtotaal overige km`]);
+    sheetRows.push([]);
+    sheetRows.push([`🧾 OVERIGE KOSTEN`]);
+    sheetRows.push(['Datum','Type','Omschrijving','Voluta','Bedrag (voluta)','Bedrag (€)','Bonnetjes']);
+    if (otherEntries.length === 0) sheetRows.push(['Geen overige kosten in deze periode','','','','','','']);
+    else otherEntries.forEach(e => sheetRows.push([formatDate(e.date),e.declType||'Overig',e.desc||'',e.currency||'EUR',parseFloat(e.amount.toFixed(2)),parseFloat(getEurAmount(e).toFixed(2)),(e.photos||[]).length>0?`${(e.photos||[]).length} foto('s) → zie Bonnetjes`:'-']));
+    sheetRows.push(['','','','','', parseFloat(otherTotal.toFixed(2)), `Subtotaal overige kosten`]);
+    sheetRows.push([]);
+    sheetRows.push(['TOTAAL WOON-WERK KM', '', '', wwEntries.reduce((s,e)=>s+e.km,0), '', parseFloat(wwKmTotal.toFixed(2)), '']);
+    sheetRows.push(['TOTAAL OVERIGE KM', '', '', kmEntries.reduce((s,e)=>s+e.km,0), '', parseFloat(kmTotal.toFixed(2)), '']);
+    sheetRows.push(['TOTAAL OVERIGE KOSTEN', '', '', '', '', parseFloat(otherTotal.toFixed(2)), '']);
+    sheetRows.push(['TOTAAL ALLES', '', '', '', '', parseFloat(grandTotal.toFixed(2)), '']);
+  }
   const ws1 = XLSX.utils.aoa_to_sheet(sheetRows);
   ws1['!cols'] = [14,18,36,12,14,14,24].map(w=>({wch:w}));
 
@@ -1991,7 +2020,7 @@ async function buildExcelWithPhotos(data, filename) {
   ws2['!rows'] = Object.values(rowHeights);
 
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws1, 'Declaraties');
+  XLSX.utils.book_append_sheet(wb, ws1, isBusiness ? 'Zakelijke kosten' : 'Declaraties');
   XLSX.utils.book_append_sheet(wb, ws2, 'Bonnetjes');
   const xlsxBinary = XLSX.write(wb, {type:'binary', bookType:'xlsx'});
   const zip = await JSZip.loadAsync(binStrToUint8(xlsxBinary));
