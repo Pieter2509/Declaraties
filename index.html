@@ -175,6 +175,27 @@ textarea { resize: vertical; min-height: 58px; }
 .entries-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .entries-header h2 { font-size: 13px; font-weight: 700; }
 .entries-list { display: flex; flex-direction: column; gap: 8px; }
+.entries-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+.sort-control { display: flex; align-items: center; gap: 6px; }
+.sort-control label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; }
+.sort-control select { width: auto; padding: 7px 9px; font-size: 12px; }
+.filter-chips { display: flex; gap: 7px; margin-left: auto; }
+.filter-chip {
+  display: flex; align-items: center; gap: 5px; padding: 7px 12px; border-radius: 999px;
+  border: 1.5px solid var(--border); background: var(--bg); color: var(--muted);
+  font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s; user-select: none;
+}
+.filter-chip .fc-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .5; }
+.filter-chip.fc-personal.active { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
+.filter-chip.fc-business.active { background: var(--zk-light); border-color: var(--zk); color: var(--zk); }
+.filter-chip:not(.active) { opacity: .55; text-decoration: line-through; }
+.filter-chip:not(.active):hover { opacity: .85; }
+@media (max-width: 580px) {
+  .entries-controls { flex-direction: column; align-items: stretch; }
+  .sort-control { justify-content: space-between; }
+  .sort-control select { flex: 1; }
+  .filter-chips { margin-left: 0; }
+}
 
 .entry-card { background: white; border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; box-shadow: var(--shadow); transition: box-shadow .15s; }
 .entry-card:hover { box-shadow: var(--shadow-md); }
@@ -551,6 +572,26 @@ textarea { resize: vertical; min-height: 58px; }
     <h2 id="entriesTitle">Declaraties</h2>
     <span id="entryCount" style="font-size:11px;color:var(--muted)"></span>
   </div>
+  <div class="entries-controls">
+    <div class="sort-control">
+      <label for="sortSelect" data-i18n="sortLabel">Sorteer op</label>
+      <select id="sortSelect" onchange="onSortChange(this.value)">
+        <option value="expense-desc" data-i18n="sortExpenseDesc">📅 Datum kosten (nieuw → oud)</option>
+        <option value="expense-asc" data-i18n="sortExpenseAsc">📅 Datum kosten (oud → nieuw)</option>
+        <option value="created-desc" data-i18n="sortCreatedDesc">🕓 Datum aanmaak (nieuw → oud)</option>
+        <option value="created-asc" data-i18n="sortCreatedAsc">🕓 Datum aanmaak (oud → nieuw)</option>
+        <option value="category" data-i18n="sortCategory">🏷 Per kostenpost</option>
+      </select>
+    </div>
+    <div class="filter-chips">
+      <button type="button" class="filter-chip fc-personal active" id="filterPersonalBtn" onclick="toggleFilter('personal')">
+        <span class="fc-dot"></span><span data-i18n="filterPersonal">Persoonlijk</span>
+      </button>
+      <button type="button" class="filter-chip fc-business active" id="filterBusinessBtn" onclick="toggleFilter('business')">
+        <span class="fc-dot"></span><span data-i18n="filterBusiness">💳 Zakelijk</span>
+      </button>
+    </div>
+  </div>
   <div class="entries-list" id="entriesList"></div>
 
 </div>
@@ -663,6 +704,15 @@ const TRANSLATIONS = {
     business: '💳 Zakelijk',
     businessExpenses: '💳 Zakelijk (kaart)',
     businessHint: '💳 Kosten betaald met de zakelijke creditcard. Deze tellen niet mee in je persoonlijke totaal, maar worden wel meegenomen in de Excel-export met bonnetjes.',
+    sortLabel: 'Sorteer op',
+    sortExpenseDesc: '📅 Datum kosten (nieuw → oud)',
+    sortExpenseAsc: '📅 Datum kosten (oud → nieuw)',
+    sortCreatedDesc: '🕓 Datum aanmaak (nieuw → oud)',
+    sortCreatedAsc: '🕓 Datum aanmaak (oud → nieuw)',
+    sortCategory: '🏷 Per kostenpost',
+    filterPersonal: 'Persoonlijk',
+    filterBusiness: '💳 Zakelijk',
+    toastFilterBothOff: 'Je kan niet beide filters uitzetten — er moet minstens één actief blijven.',
     date: 'Datum',
     commute: 'Woon-werk',
     commuteAutoFill: 'Automatisch',
@@ -761,6 +811,15 @@ const TRANSLATIONS = {
     business: '💳 Business card',
     businessExpenses: '💳 Business card',
     businessHint: '💳 Expenses paid with the business credit card. These are not included in your personal total, but are included in the Excel export together with the receipts.',
+    sortLabel: 'Sort by',
+    sortExpenseDesc: '📅 Expense date (newest → oldest)',
+    sortExpenseAsc: '📅 Expense date (oldest → newest)',
+    sortCreatedDesc: '🕓 Date added (newest → oldest)',
+    sortCreatedAsc: '🕓 Date added (oldest → newest)',
+    sortCategory: '🏷 By expense type',
+    filterPersonal: 'Personal',
+    filterBusiness: '💳 Business',
+    toastFilterBothOff: "You can't turn off both filters — at least one has to stay on.",
     date: 'Date',
     commute: 'Home-Office commute',
     commuteAutoFill: 'Auto-fill',
@@ -961,6 +1020,9 @@ let allEntries = [];
 let currentYear = new Date().getFullYear();
 let currentMonth = new Date().getMonth();
 let currentTab = 'km', wwActive = false;
+let sortMode = localStorage.getItem('sortMode') || 'expense-desc';
+let filterPersonal = localStorage.getItem('filterPersonal') !== 'false';
+let filterBusiness = localStorage.getItem('filterBusiness') !== 'false';
 let pendingKm = [], pendingOther = [], pendingBusiness = [];
 const MAX_PHOTOS_BYTES = 950000;
 let deleteId = null, exportScope = 'current', currentExportType = 'personal', stopCount = 0;
@@ -1149,7 +1211,56 @@ function getEurAmount(e) {
   return (e.currency && e.currency !== 'EUR' && e.eurAmount != null) ? e.eurAmount : e.amount;
 }
 
+function onSortChange(val) {
+  sortMode = val;
+  localStorage.setItem('sortMode', val);
+  updateMonthUI();
+}
+window.onSortChange = onSortChange;
+
+function toggleFilter(kind) {
+  const nextPersonal = kind === 'personal' ? !filterPersonal : filterPersonal;
+  const nextBusiness = kind === 'business' ? !filterBusiness : filterBusiness;
+  if (!nextPersonal && !nextBusiness) { toast(t('toastFilterBothOff')); return; }
+  if (kind === 'personal') filterPersonal = nextPersonal; else filterBusiness = nextBusiness;
+  localStorage.setItem('filterPersonal', filterPersonal);
+  localStorage.setItem('filterBusiness', filterBusiness);
+  document.getElementById('filterPersonalBtn').classList.toggle('active', filterPersonal);
+  document.getElementById('filterBusinessBtn').classList.toggle('active', filterBusiness);
+  updateMonthUI();
+}
+window.toggleFilter = toggleFilter;
+
+function getCategoryLabel(e) {
+  if (e.type === 'km') return e.kmType === 'ww' ? t('commute') : t('kilometers');
+  if (e.type === 'business') return e.declType || t('business');
+  return e.declType || t('otherExpenses');
+}
+
+function applySortAndFilter(entries) {
+  const filtered = entries.filter(e => e.type === 'business' ? filterBusiness : filterPersonal);
+  const byExpenseAsc = (a,b) => new Date(a.date) - new Date(b.date);
+  const byCreatedAsc = (a,b) => (a.createdAt||0) - (b.createdAt||0);
+  switch (sortMode) {
+    case 'expense-asc': return filtered.sort(byExpenseAsc);
+    case 'created-desc': return filtered.sort((a,b) => byCreatedAsc(b,a));
+    case 'created-asc': return filtered.sort(byCreatedAsc);
+    case 'category': return filtered.sort((a,b) => {
+        const catA = getCategoryLabel(a), catB = getCategoryLabel(b);
+        return catA === catB ? byExpenseAsc(b,a) : catA.localeCompare(catB, 'nl');
+      });
+    case 'expense-desc':
+    default: return filtered.sort((a,b) => byExpenseAsc(b,a));
+  }
+}
+
 function updateMonthUI() {
+  const sortSelectEl = document.getElementById('sortSelect');
+  if (sortSelectEl && sortSelectEl.value !== sortMode) sortSelectEl.value = sortMode;
+  const filterPersonalBtn = document.getElementById('filterPersonalBtn');
+  const filterBusinessBtn = document.getElementById('filterBusinessBtn');
+  if (filterPersonalBtn) filterPersonalBtn.classList.toggle('active', filterPersonal);
+  if (filterBusinessBtn) filterBusinessBtn.classList.toggle('active', filterBusiness);
   document.getElementById('monthLabel').textContent = `${MONTHS()[currentMonth]} ${currentYear}`;
   document.getElementById('expCurrentLabel').textContent = t('expCurrentLabel', MONTHS()[currentMonth], currentYear);
   document.getElementById('expYearLabel').textContent = t('expYearLabel', currentYear);
@@ -1164,10 +1275,11 @@ function updateMonthUI() {
   document.getElementById('sumTotal').textContent = formatEur(total);
   document.getElementById('monthTotalLabel').textContent = formatEur(total);
   document.getElementById('entriesTitle').textContent = t('entriesTitle', MONTHS()[currentMonth], currentYear);
-  const n = entries.length;
+  const displayEntries = applySortAndFilter(entries);
+  const n = displayEntries.length;
   document.getElementById('entryCount').textContent = `${n} item${n !== 1 ? 's' : ''}`;
-  renderCalendar(entries);
-  renderEntries(entries);
+  renderCalendar(displayEntries);
+  renderEntries(displayEntries);
 }
 
 function renderCalendar(entries) {
