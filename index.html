@@ -601,7 +601,7 @@ textarea { resize: vertical; min-height: 58px; }
         <input type="number" id="settingWwKm" min="1">
         <p style="font-size:11px;color:var(--muted);margin-top:4px">Totaal: 2× deze waarde = heen + terug</p>
       </div>
-      <p style="font-size:11px;color:var(--muted);margin-bottom:14px" data-i18n="kmRate">Km-tarief: €0,23 per km (wettelijk tarief 2026)</p>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:14px" data-i18n="kmRate">Km-tarief: €0,25 per km (wettelijk tarief 2026)</p>
       <div style="border-top:1px solid var(--border);padding-top:14px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
           <span style="font-size:12px;color:var(--muted)" id="userName"></span>
@@ -687,7 +687,7 @@ const TRANSLATIONS = {
     downloadExcel: '⬇ Download Excel',
     settings: '⚙️ Instellingen',
     commuteDistance: 'Woon-werk afstand (km enkele reis)',
-    kmRate: 'Km-tarief: €0,23 per km (wettelijk tarief 2026)',
+    kmRate: 'Km-tarief: €0,25 per km (wettelijk tarief 2026)',
     logout: 'Uitloggen',
     myProfile: '👤 Mijn gegevens (Travel Report)',
     save: 'Opslaan',
@@ -731,7 +731,7 @@ const TRANSLATIONS = {
     toastLoggedOut: 'Uitgelogd',
     dateSet: (d,m,y) => `📅 Datum ingesteld op ${d}-${m}-${y}`,
     commuteAutoText: 'Automatisch',
-    kmTax: 'Km-tarief: €0,23 per km (wettelijk tarief 2026)',
+    kmTax: 'Km-tarief: €0,25 per km (wettelijk tarief 2026)',
     expCurrentLabel: (m,y) => `${m} ${y}`,
     expYearLabel: (y) => `Heel ${y}`,
     months: ['Januari','Februari','Maart','April','Mei','Juni','Juli','Augustus','September','Oktober','November','December'],
@@ -785,7 +785,7 @@ const TRANSLATIONS = {
     downloadExcel: '⬇ Download Excel',
     settings: '⚙️ Settings',
     commuteDistance: 'Home-Office distance (km one way)',
-    kmRate: 'Mileage rate: €0.23 per km (statutory rate 2026)',
+    kmRate: 'Mileage rate: €0.25 per km (statutory rate 2026)',
     logout: 'Sign out',
     myProfile: '👤 My profile (Travel Report)',
     save: 'Save',
@@ -829,7 +829,7 @@ const TRANSLATIONS = {
     toastLoggedOut: 'Signed out',
     dateSet: (d,m,y) => `📅 Date set to ${m}/${d}/${y}`,
     commuteAutoText: 'Auto-fill',
-    kmTax: 'Mileage rate: €0.23 per km (statutory rate 2026)',
+    kmTax: 'Mileage rate: €0.25 per km (statutory rate 2026)',
     expCurrentLabel: (m,y) => `${m} ${y}`,
     expYearLabel: (y) => `All of ${y}`,
     months: ['January','February','March','April','May','June','July','August','September','October','November','December'],
@@ -950,7 +950,7 @@ import { getFirestore, collection, addDoc, deleteDoc, doc, query, orderBy, onSna
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
-const KM_RATE = 0.23;
+const KM_RATE = 0.25;
 const WW_KEY = 'decl_ww_km';
 const MONTHS_NL = ['Januari','Februari','Maart','April','Mei','Juni','Juli','Augustus','September','Oktober','November','December'];
 const MONTHS = () => (window.TRANSLATIONS || TRANSLATIONS)[window.currentLang || currentLang].months;
