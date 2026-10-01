@@ -224,6 +224,10 @@ textarea { resize: vertical; min-height: 58px; }
 .entry-photos { padding: 0 15px 12px; display: flex; gap: 7px; flex-wrap: wrap; }
 .entry-del { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 15px; padding: 5px 7px; border-radius: var(--r-sm); transition: all .15s; }
 .entry-del:hover { color: var(--danger); background: var(--danger-light); }
+.entry-edit { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 15px; padding: 5px 7px; border-radius: var(--r-sm); transition: all .15s; }
+.entry-edit:hover { color: var(--accent); background: var(--border); }
+.edit-banner { display:none; align-items:center; justify-content:space-between; gap:8px; background:#fff7e0; border:1px solid #f0d58a; border-radius:8px; padding:8px 12px; margin-bottom:12px; font-size:12px; font-weight:600; }
+.edit-banner.show { display:flex; }
 
 .empty-state { text-align: center; padding: 44px 24px; background: white; border: 1px dashed var(--border); border-radius: var(--r); }
 .empty-state .icon { font-size: 38px; margin-bottom: 8px; }
@@ -304,7 +308,7 @@ textarea { resize: vertical; min-height: 58px; }
     <button class="btn btn-secondary btn-sm" id="langToggle" onclick="toggleLang()" style="font-size:11px;font-weight:700;min-width:36px">NL</button>
     <button class="btn btn-secondary btn-sm" onclick="openExportModal('personal')">⬇ <span data-i18n="export">Export</span></button>
     <button class="btn btn-secondary btn-sm" onclick="openExportModal('business')" style="color:var(--zk);border-color:var(--zk)">💳 <span data-i18n="exportBusiness">Zakelijk Excel</span></button>
-    <button class="btn btn-secondary btn-sm" onclick="generateTravelExpense()" style="color:var(--success);border-color:var(--success)">✈️ <span data-i18n="travelReport">Travel Report</span></button>
+    <button class="btn btn-secondary btn-sm" onclick="openTravelModal()" style="color:var(--success);border-color:var(--success)">✈️ <span data-i18n="travelReport">Travel Report</span></button>
     <button class="btn btn-secondary btn-sm btn-icon" onclick="openSettings()">⚙️</button>
     <img id="userAvatar" style="width:30px;height:30px;border-radius:50%;object-fit:cover;border:2px solid var(--border);cursor:pointer;display:none;" onclick="logout()">
   </div>
@@ -350,7 +354,8 @@ textarea { resize: vertical; min-height: 58px; }
 
   <!-- ADD FORM -->
   <div class="form-card">
-    <div class="form-card-title" data-i18n="addExpense">➕ Declaratie toevoegen</div>
+    <div class="form-card-title" id="formCardTitle" data-i18n="addExpense">➕ Declaratie toevoegen</div>
+    <div class="edit-banner" id="editBanner"><span id="editBannerText">Je bewerkt een bestaande declaratie</span><button class="btn btn-secondary btn-sm" onclick="cancelEdit()" id="cancelEditBtn">Annuleer bewerken</button></div>
 
     <div class="form-tabs">
       <button class="tab-btn active" id="tabKm" onclick="switchTab('km')" data-i18n="kilometers">🚗 Kilometers</button>
@@ -629,6 +634,27 @@ textarea { resize: vertical; min-height: 58px; }
   </div>
 </div>
 
+<!-- TRAVEL REPORT MODAL -->
+<div class="modal-overlay" id="travelModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 data-i18n="travelModalTitle">✈️ Travel Expense Report</h3>
+      <button class="modal-close" onclick="closeModal('travelModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="color:var(--muted);margin-bottom:14px;font-size:12px" data-i18n="travelModalSubtitle">Kies de periode.</p>
+      <div class="form-grid">
+        <div class="fg"><label data-i18n="fromMonth">Van</label><select id="travelFrom"></select></div>
+        <div class="fg"><label data-i18n="toMonth">Tot en met</label><select id="travelTo"></select></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('travelModal')" data-i18n="cancel">Annuleren</button>
+      <button class="btn btn-success" onclick="generateTravelExpense()" data-i18n="generate">⬇ Genereer</button>
+    </div>
+  </div>
+</div>
+
 <!-- SETTINGS MODAL -->
 <div class="modal-overlay" id="settingsModal">
   <div class="modal">
@@ -694,6 +720,16 @@ const TRANSLATIONS = {
     export: 'Export',
     exportBusiness: 'Zakelijk Excel',
     travelReport: 'Travel Report',
+    editExpense: '✏️ Declaratie bewerken',
+    editBanner: 'Je bewerkt een bestaande declaratie',
+    cancelEdit: 'Annuleer bewerken',
+    toastUpdated: '✓ Declaratie bijgewerkt',
+    toastEditTabLocked: 'Je kan het type niet wijzigen tijdens bewerken — annuleer eerst.',
+    travelModalTitle: '✈️ Travel Expense Report',
+    travelModalSubtitle: 'Kies de periode. Eén maand of meerdere maanden — alles komt in 1 Excel-bestand.',
+    fromMonth: 'Van',
+    toMonth: 'Tot en met',
+    generate: '⬇ Genereer',
     kmReimbursement: '🚗 Km vergoeding',
     otherExpenses: '🧾 Overige kosten',
     total: '💰 Totaal',
@@ -801,6 +837,16 @@ const TRANSLATIONS = {
     export: 'Export',
     exportBusiness: 'Business Excel',
     travelReport: 'Travel Report',
+    editExpense: '✏️ Edit expense',
+    editBanner: 'You are editing an existing expense',
+    cancelEdit: 'Cancel editing',
+    toastUpdated: '✓ Expense updated',
+    toastEditTabLocked: "You can't change the type while editing — cancel first.",
+    travelModalTitle: '✈️ Travel Expense Report',
+    travelModalSubtitle: 'Choose the period. One month or several months — everything ends up in 1 Excel file.',
+    fromMonth: 'From',
+    toMonth: 'Up to and including',
+    generate: '⬇ Generate',
     kmReimbursement: '🚗 Mileage reimbursement',
     otherExpenses: '🧾 Other expenses',
     total: '💰 Total',
@@ -949,6 +995,7 @@ function applyTranslations() {
   if (btn) btn.textContent = currentLang === 'nl' ? 'EN' : 'NL';
   // Re-render month UI labels if available
   if (typeof updateMonthUI === 'function') updateMonthUI();
+  if (typeof updateEditUI === 'function') updateEditUI();
 }
 
 function toggleLang() {
@@ -1004,7 +1051,7 @@ window.TRAVEL_TEMPLATE_B64 = TRAVEL_TEMPLATE_B64;
 <!-- ══ FIREBASE SDK ══════════════════════════════════════════════ -->
 <script type="module">
 import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, collection, addDoc, deleteDoc, doc, query, orderBy, onSnapshot, where, getDoc, setDoc }
+import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, query, orderBy, onSnapshot, where, getDoc, setDoc }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
@@ -1025,6 +1072,7 @@ let filterPersonal = localStorage.getItem('filterPersonal') !== 'false';
 let filterBusiness = localStorage.getItem('filterBusiness') !== 'false';
 let pendingKm = [], pendingOther = [], pendingBusiness = [];
 const MAX_PHOTOS_BYTES = 950000;
+let editingId = null;
 let deleteId = null, exportScope = 'current', currentExportType = 'personal', stopCount = 0;
 window.currentExportType = currentExportType;
 
@@ -1350,6 +1398,7 @@ function debugDates() {
 window.debugDates = debugDates;
 
 function switchTab(tab) {
+  if (editingId && tab !== currentTab) { toast(t('toastEditTabLocked')); return; }
   currentTab = tab;
   document.getElementById('formKm').style.display = tab === 'km' ? 'block' : 'none';
   document.getElementById('formOther').style.display = tab === 'other' ? 'block' : 'none';
@@ -1504,6 +1553,83 @@ function removePhoto(btn, form, idx) {
 window.removePhoto = removePhoto;
 
 
+async function saveEntry(payload) {
+  if (editingId) {
+    const { uid, createdAt, ...rest } = payload;
+    await updateDoc(doc(db, 'declaraties', editingId), { ...rest, updatedAt: Date.now() });
+  } else {
+    await addDoc(collection(db, 'declaraties'), payload);
+  }
+}
+
+function updateEditUI() {
+  const on = !!editingId;
+  const banner = document.getElementById('editBanner');
+  if (!banner) return;
+  banner.classList.toggle('show', on);
+  document.getElementById('editBannerText').textContent = t('editBanner');
+  document.getElementById('cancelEditBtn').textContent = t('cancelEdit');
+  document.getElementById('formCardTitle').textContent = on ? t('editExpense') : t('addExpense');
+  document.getElementById('addBtn').textContent = on ? t('save') : t('add');
+}
+window.updateEditUI = updateEditUI;
+
+function addPhotoThumb(form, dataUrl, idx) {
+  const preview = document.getElementById(form === 'km' ? 'kmPhotoPreview' : (form === 'business' ? 'businessPhotoPreview' : 'otherPhotoPreview'));
+  const wrap = document.createElement('div');
+  wrap.className = 'photo-thumb-wrap';
+  wrap.innerHTML = `<img class="photo-thumb" src="${dataUrl}" onclick="openLightbox('${dataUrl}')"><button class="photo-remove-btn" onclick="removePhoto(this,'${form}',${idx})" title="Verwijder">×</button>`;
+  preview.appendChild(wrap);
+}
+
+function startEdit(id) {
+  const e = allEntries.find(x => x.id === id);
+  if (!e) return;
+  resetForm();
+  const form = e.type === 'km' ? 'km' : (e.type === 'business' ? 'business' : 'other');
+  switchTab(form === 'km' ? 'km' : form);
+  if (form === 'km') {
+    document.getElementById('kmDate').value = e.date;
+    document.getElementById('kmKm').value = e.km;
+    if (e.kmType === 'ww') {
+      wwActive = true;
+      document.getElementById('wwToggle').classList.add('active');
+      document.getElementById('kmKm').readOnly = true;
+      document.getElementById('routeSection').style.display = 'none';
+    } else {
+      const parts = (e.route || '').split(' → ').filter(Boolean);
+      while (parts.length < 2) parts.push('');
+      document.getElementById('stopsList').innerHTML = '';
+      stopCount = 0;
+      parts.forEach((val, i) => {
+        addStop(i === 0 ? '🏢' : '📍', i === 0 ? 'Kantoor / vertrekpunt' : (i === parts.length - 1 ? 'Bestemming' : 'Tussenstop'));
+        document.getElementById('stop_' + stopCount).value = val;
+      });
+    }
+    onKmChange();
+  } else {
+    const p = form === 'business' ? 'business' : 'other';
+    document.getElementById(p + 'Date').value = e.date;
+    document.getElementById(p + 'Type').value = e.declType || '';
+    document.getElementById(p + 'Desc').value = e.desc || '';
+    const cur = e.currency || 'EUR';
+    const known = [...document.getElementById(p + 'Currency').options].some(o => o.value === cur);
+    document.getElementById(p + 'Currency').value = known ? cur : 'OTHER';
+    if (!known) document.getElementById(p + 'CurrencyOther').value = cur;
+    document.getElementById(p + 'Amount').value = e.amount;
+    document.getElementById(p === 'business' ? 'businessEurAmount' : 'otherEurAmount').value = e.eurAmount != null ? e.eurAmount : '';
+    onCurrencyChange(p === 'business' ? 'business' : undefined);
+  }
+  (e.photos || []).forEach(ph => { const arr = getPendingArr(form); const idx = arr.push(ph) - 1; addPhotoThumb(form, ph, idx); });
+  editingId = id;
+  updateEditUI();
+  document.querySelector('.form-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+window.startEdit = startEdit;
+
+function cancelEdit() { resetForm(); }
+window.cancelEdit = cancelEdit;
+
 async function addEntry() {
   if (!db || !currentUser) return;
   const btn = document.getElementById('addBtn');
@@ -1517,7 +1643,7 @@ async function addEntry() {
       const route = wwActive ? 'Woon-werk' : getRouteString();
       const photos = pendingKm.filter(Boolean);
       if (totalPhotosBytes(photos) > MAX_PHOTOS_BYTES) { toast(t('toastPhotosTooLarge')); btn.disabled = false; return; }
-      await addDoc(collection(db, 'declaraties'), {
+      await saveEntry({
         type: 'km', kmType: wwActive ? 'ww' : 'km', date, km, route,
         photos, uid: currentUser.uid, createdAt: Date.now()
       });
@@ -1536,7 +1662,7 @@ async function addEntry() {
       if (currency !== 'EUR' && (!eurAmount || eurAmount<=0)) { toast(t('toastFillEur')); btn.disabled = false; return; }
       const photos = pendingBusiness.filter(Boolean);
       if (totalPhotosBytes(photos) > MAX_PHOTOS_BYTES) { toast(t('toastPhotosTooLarge')); btn.disabled = false; return; }
-      await addDoc(collection(db, 'declaraties'), {
+      await saveEntry({
         type: 'business', declType: type, desc, date, amount, currency,
         eurAmount: currency === 'EUR' ? null : eurAmount,
         photos, uid: currentUser.uid, createdAt: Date.now()
@@ -1556,19 +1682,20 @@ async function addEntry() {
       if (currency !== 'EUR' && (!eurAmount || eurAmount<=0)) { toast(t('toastFillEur')); btn.disabled = false; return; }
       const photos = pendingOther.filter(Boolean);
       if (totalPhotosBytes(photos) > MAX_PHOTOS_BYTES) { toast(t('toastPhotosTooLarge')); btn.disabled = false; return; }
-      await addDoc(collection(db, 'declaraties'), {
+      await saveEntry({
         type: 'other', declType: type, desc, date, amount, currency,
         eurAmount: currency === 'EUR' ? null : eurAmount,
         photos, uid: currentUser.uid, createdAt: Date.now()
       });
     }
+    const wasEdit = !!editingId;
     const savedDate = currentTab === 'km' ? document.getElementById('kmDate').value : (currentTab === 'business' ? document.getElementById('businessDate').value : document.getElementById('otherDate').value);
     resetForm();
     const sd = new Date(savedDate);
     if (sd.getFullYear() !== currentYear || sd.getMonth() !== currentMonth) {
       toast(t('toastSavedOutside', MONTHS()[currentMonth], currentYear));
     } else {
-      toast(t('toastSaved'));
+      toast(wasEdit ? t('toastUpdated') : t('toastSaved'));
     }
   } catch(e) {
     console.error(e);
@@ -1579,6 +1706,7 @@ async function addEntry() {
 window.addEntry = addEntry;
 
 function resetForm() {
+  editingId = null;
   wwActive = false;
   document.getElementById('wwToggle').classList.remove('active');
   document.getElementById('kmKm').readOnly = false;
@@ -1604,6 +1732,7 @@ function resetForm() {
   if (!document.getElementById('otherDate').value) document.getElementById('otherDate').value = today;
   if (!document.getElementById('businessDate').value) document.getElementById('businessDate').value = today;
   initStops();
+  updateEditUI();
 }
 window.resetForm = resetForm;
 
@@ -1641,7 +1770,7 @@ function renderEntries(entries) {
         </div>
         <div class="entry-right">
           <div class="entry-amount ${amtClass}">${formatEur(amount)}</div>
-          <div class="entry-actions"><button class="entry-del" onclick="openDelete('${e.id}')">🗑</button></div>
+          <div class="entry-actions"><button class="entry-edit" onclick="startEdit('${e.id}')" title="Bewerken">✏️</button><button class="entry-del" onclick="openDelete('${e.id}')">🗑</button></div>
         </div>
       </div>
       ${photos.length ? `<div class="entry-photos">${photos.map(p=>`<img class="photo-thumb" src="${p}" onclick="openLightbox('${p}')">`).join('')}</div>` : ''}
@@ -1709,24 +1838,47 @@ function getDescriptionEN(entry) {
   return entry.desc ? `${typeEN} – ${entry.desc}` : typeEN;
 }
 
+function openTravelModal() {
+  const dates = allEntries.filter(e => e.type !== 'business').map(e => new Date(e.date)).filter(d => !isNaN(d));
+  const idx = d => d.getFullYear() * 12 + d.getMonth();
+  const cur = currentYear * 12 + currentMonth;
+  const lo = Math.min(cur, ...dates.map(idx)), hi = Math.max(cur, ...dates.map(idx));
+  const opts = [];
+  for (let i = lo; i <= hi; i++) opts.push(`<option value="${i}">${MONTHS()[i % 12]} ${Math.floor(i / 12)}</option>`);
+  ['travelFrom', 'travelTo'].forEach(id => { const el = document.getElementById(id); el.innerHTML = opts.join(''); el.value = cur; });
+  openModal('travelModal');
+}
+window.openTravelModal = openTravelModal;
+
 async function generateTravelExpense() {
-  const data = getMonthEntries().filter(e => e.type !== 'business');
+  let from = +document.getElementById('travelFrom').value, to = +document.getElementById('travelTo').value;
+  if (from > to) [from, to] = [to, from];
+  const data = allEntries.filter(e => {
+    if (e.type === 'business') return false;
+    const d = new Date(e.date), i = d.getFullYear() * 12 + d.getMonth();
+    return i >= from && i <= to;
+  });
   if (data.length === 0) { toast(t('toastNoEntries')); return; }
+  closeModal('travelModal');
   toast(t('toastGenerating'));
   setLoading(true);
-  try { await buildTravelExpenseReport(data); toast(t('toastDownloaded')); }
+  const range = { sy: Math.floor(from / 12), sm: from % 12, ey: Math.floor(to / 12), em: to % 12 };
+  try { await buildTravelExpenseReport(data, range); toast(t('toastDownloaded')); }
   catch(e) { console.error(e); toast(t('toastGenerateFailed') + e.message); }
   setLoading(false);
 }
 window.generateTravelExpense = generateTravelExpense;
 
 // ── TRAVEL EXPENSE REPORT — template invullen + tabblad Bonnetjes ──
-async function buildTravelExpenseReport(data) {
+async function buildTravelExpenseReport(data, range) {
+  range = range || { sy: currentYear, sm: currentMonth, ey: currentYear, em: currentMonth };
   data = [...data].sort((a,b) => new Date(a.date) - new Date(b.date));
   const monthNamesEN = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  const monthEN  = monthNamesEN[currentMonth];
-  const firstDay = new Date(currentYear, currentMonth, 1);
-  const lastDay  = new Date(currentYear, currentMonth + 1, 0);
+  const sameMonth = range.sy === range.ey && range.sm === range.em;
+  const monthEN  = sameMonth ? monthNamesEN[range.sm] : `${monthNamesEN[range.sm]}_${range.sy}-${monthNamesEN[range.em]}`;
+  const yearEN   = sameMonth ? range.sy : range.ey;
+  const firstDay = new Date(range.sy, range.sm, 1);
+  const lastDay  = new Date(range.ey, range.em + 1, 0);
   const rows = buildTravelRows(data);
 
   const zip = await JSZip.loadAsync(base64ToUint8(window.TRAVEL_TEMPLATE_B64 || TRAVEL_TEMPLATE_B64));
@@ -1885,7 +2037,7 @@ async function buildTravelExpenseReport(data) {
   const a = document.createElement('a');
   a.href = url;
   const ts = new Date().toISOString().replace(/[:T]/g,'-').slice(0,16);
-  a.download = `Business_Travel_Expenses_Summary_-_${monthEN}_${currentYear}_${ts}.xlsx`;
+  a.download = `Business_Travel_Expenses_Summary_-_${monthEN}_${yearEN}_${ts}.xlsx`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 3000);
 }
@@ -1984,13 +2136,16 @@ function buildTravelRows(data) {
   const wwEntries    = data.filter(e => e.type === 'km' && e.kmType === 'ww');
   const kmEntries    = data.filter(e => e.type === 'km' && e.kmType !== 'ww');
   const otherEntries = data.filter(e => e.type === 'other');
-  if (wwEntries.length > 0) {
-    const totalAmt = parseFloat((wwEntries.reduce((s,e)=>s+e.km,0)*KM_RATE).toFixed(2));
-    const dates = wwEntries.map(e => new Date(e.date));
+  const wwByMonth = {};
+  wwEntries.forEach(e => { const d = new Date(e.date); const k = d.getFullYear() * 12 + d.getMonth(); (wwByMonth[k] = wwByMonth[k] || []).push(e); });
+  Object.keys(wwByMonth).sort((a, b) => a - b).forEach(k => {
+    const grp = wwByMonth[k];
+    const totalAmt = parseFloat((grp.reduce((s,e)=>s+e.km,0)*KM_RATE).toFixed(2));
+    const dates = grp.map(e => new Date(e.date));
     const minD = new Date(Math.min(...dates)), maxD = new Date(Math.max(...dates));
     const dateStr = minD.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) + ' \u2013 ' + maxD.toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
-    rows.push({ date: dateStr, desc: `Home \u2194 Office commute (${wwEntries.length}\u00d7 ${wwEntries[0].km} km)`, currency: 'EUR', J: totalAmt });
-  }
+    rows.push({ date: dateStr, desc: `Home \u2194 Office commute (${grp.length}\u00d7 ${grp[0].km} km)`, currency: 'EUR', J: totalAmt });
+  });
   kmEntries.forEach(e => rows.push({ date: fmtDateEN(e.date), desc: e.route || 'Kilometers', currency: 'EUR', J: parseFloat((e.km*KM_RATE).toFixed(2)) }));
   otherEntries.forEach(e => {
     const r = { date: fmtDateEN(e.date), desc: getDescriptionEN(e), currency: e.currency || 'EUR', eur: parseFloat(getEurAmount(e).toFixed(2)) };
